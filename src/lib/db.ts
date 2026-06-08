@@ -159,56 +159,27 @@ db.exec(`
   );
 `);
 
-// Alter table migrations to add is_active column on existing DB databases safely
+// Alter table migrations to add columns on existing DB databases safely
 try {
   db.exec('ALTER TABLE matches ADD COLUMN is_active INTEGER DEFAULT 0;');
-} catch (e) {
+} catch {
+  // Column already exists, ignore
+}
+try {
+  db.exec('ALTER TABLE matches ADD COLUMN finished_at TEXT;');
+} catch {
+  // Column already exists, ignore
+}
+try {
+  db.exec('ALTER TABLE matches ADD COLUMN session_closed INTEGER DEFAULT 0;');
+} catch {
   // Column already exists, ignore
 }
 
-// Seed initial data if empty
-const matchExists = db.prepare('SELECT id FROM matches WHERE id = ?').get('a0000000-0000-0000-0000-000000000001');
-if (!matchExists) {
-  const now = Date.now();
-  db.prepare(`INSERT INTO matches (id, home_team, away_team, home_score, away_score, status, starts_at, bets_closed_at, elapsed_time, possession_home, shots_on_target_home, corners_home, cards_home, is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)`).run(
-    'a0000000-0000-0000-0000-000000000001',
-    'France', 'Angleterre', 1, 0, 'live',
-    new Date(now - 65 * 60 * 1000).toISOString(),
-    new Date(now + 15 * 60 * 1000).toISOString(),
-    65, 55, 4, 5, 1
-  );
-
-  const markets = [
-    { id: 'b0000000-0000-0000-0000-000000000001', type: 'final_result', title: 'RÉSULTAT DU MATCH' },
-    { id: 'b0000000-0000-0000-0000-000000000002', type: 'exact_score', title: 'SCORE EXACT' },
-    { id: 'b0000000-0000-0000-0000-000000000003', type: 'first_scorer', title: 'PREMIER BUTEUR' },
-    { id: 'b0000000-0000-0000-0000-000000000004', type: 'corners_count', title: 'NOMBRE DE CORNERS FRANCE' },
-  ];
-  const insM = db.prepare(`INSERT INTO markets (id,match_id,type,title,is_active,is_closed,resolved_outcome_id,is_flash,closes_at) VALUES (?,?,?,?,1,0,NULL,0,NULL)`);
-  for (const m of markets) insM.run(m.id, 'a0000000-0000-0000-0000-000000000001', m.type, m.title);
-
-  const outcomes = [
-    ['o-res-home','b0000000-0000-0000-0000-000000000001','France',1.40,1.40,8500,42],
-    ['o-res-draw','b0000000-0000-0000-0000-000000000001','Nul',3.20,3.20,2400,12],
-    ['o-res-away','b0000000-0000-0000-0000-000000000001','Angleterre',5.50,5.50,1100,6],
-    ['o-se-10','b0000000-0000-0000-0000-000000000002','1-0',2.10,2.10,4500,23],
-    ['o-se-20','b0000000-0000-0000-0000-000000000002','2-0',4.50,4.50,1200,8],
-    ['o-se-21','b0000000-0000-0000-0000-000000000002','2-1',6.00,6.00,2100,14],
-    ['o-se-30','b0000000-0000-0000-0000-000000000002','3-0',8.50,8.50,500,3],
-    ['o-se-11','b0000000-0000-0000-0000-000000000002','1-1',5.00,5.00,1900,11],
-    ['o-se-01','b0000000-0000-0000-0000-000000000002','0-1',9.00,9.00,200,2],
-    ['o-pb-mbappe','b0000000-0000-0000-0000-000000000003','Kylian Mbappé',3.50,3.50,6200,35],
-    ['o-pb-griezmann','b0000000-0000-0000-0000-000000000003','Antoine Griezmann',5.00,5.00,2800,15],
-    ['o-pb-giroud','b0000000-0000-0000-0000-000000000003','Olivier Giroud',4.50,4.50,3100,18],
-    ['o-pb-kane','b0000000-0000-0000-0000-000000000003','Harry Kane',6.00,6.00,1200,7],
-    ['o-pb-bellingham','b0000000-0000-0000-0000-000000000003','Jude Bellingham',8.00,8.00,900,5],
-    ['o-co-l5','b0000000-0000-0000-0000-000000000004','Moins de 5',2.20,2.20,1500,8],
-    ['o-co-57','b0000000-0000-0000-0000-000000000004','Entre 5 et 7',1.80,1.80,4800,26],
-    ['o-co-m7','b0000000-0000-0000-0000-000000000004','Plus de 7',3.10,3.10,1200,7],
-  ];
-  const insO = db.prepare(`INSERT INTO outcomes VALUES (?,?,?,?,?,?,?)`);
-  for (const o of outcomes) insO.run(...o);
-
+// Seed bots (joueurs fictifs du classement) si la table est vide.
+// NB : aucun match de démo n'est créé — l'hôte lance lui-même la session depuis /admin.
+const botCount = db.prepare('SELECT COUNT(*) as count FROM players WHERE is_bot = 1').get() as { count: number };
+if (botCount.count === 0) {
   const bots = [
     ['c0000000-0000-0000-0000-000000000001','ToileMaster','avatar_1',9200,15000,18,25,1,'same'],
     ['c0000000-0000-0000-0000-000000000002','AlexPro99','avatar_2',8450,12000,15,22,2,'same'],
@@ -223,8 +194,6 @@ if (!matchExists) {
   ];
   const insP = db.prepare(`INSERT INTO players (id,username,avatar,toiles_coins,total_winnings,successful_bets,total_bets,rank,rank_change,is_bot) VALUES (?,?,?,?,?,?,?,?,?,1)`);
   for (const p of bots) insP.run(...p);
-
-  db.prepare(`INSERT INTO game_settings VALUES (?,0)`).run('a0000000-0000-0000-0000-000000000001');
 }
 
 // Seed badges if empty

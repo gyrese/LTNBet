@@ -31,6 +31,24 @@ function resolveMarket(matchId: string, marketId: string, outcomeId: string) {
   const resolvedMarket = db.prepare('SELECT * FROM markets WHERE id = ?').get(marketId);
   const allOutcomes = db.prepare('SELECT * FROM outcomes WHERE market_id = ?').all(marketId);
   broadcast('market_update', { ...resolvedMarket as object, outcomes: allOutcomes });
+
+  // Broadcast player updates
+  for (const bet of pendingBets) {
+    const p = db.prepare('SELECT * FROM players WHERE id = ?').get(bet.user_id);
+    if (p) broadcast('player_update', p);
+  }
+
+  // Recalculate ranking & broadcast leaderboard
+  const players = db.prepare('SELECT * FROM players ORDER BY (toiles_coins + total_winnings) DESC').all() as any[];
+  const updRank = db.prepare('UPDATE players SET rank = ?, rank_change = ? WHERE id = ?');
+  players.forEach((p, i) => {
+    const newRank = i + 1;
+    const oldRank = p.rank || 99;
+    const change = newRank < oldRank ? 'up' : newRank > oldRank ? 'down' : 'same';
+    updRank.run(newRank, change, p.id);
+  });
+  const updatedLeaderboard = db.prepare('SELECT * FROM players ORDER BY rank').all();
+  broadcast('leaderboard_update', updatedLeaderboard);
 }
 
 function resolveHalftimeMarkets(matchId: string, homeTeam: string, awayTeam: string, htHomeScore: number, htAwayScore: number) {

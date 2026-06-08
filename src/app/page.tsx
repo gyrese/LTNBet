@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, Market, Outcome } from '@/lib/store';
+import { flagFor } from '@/lib/flags';
 import Navigation from '@/components/Navigation';
 import GameEventOverlay from '@/components/GameEventOverlay';
 
@@ -12,11 +13,14 @@ export default function HomePage() {
   const {
     currentUser,
     match,
+    hasActiveMatch,
     markets,
     placeBet,
-    runSimulationStep,
     doubleGainsActive,
   } = useGameStore();
+
+  const matchFinished = match.status === 'finished';
+  const bettingOpen = hasActiveMatch && !matchFinished;
 
   // Selected bet state
   const [selectedMarket, setSelectedMarket] = useState<Market | null>(null);
@@ -39,8 +43,42 @@ export default function HomePage() {
 
   if (!mounted || !currentUser) return null;
 
+  // ── Écran d'attente : aucun match lancé par l'hôte ──
+  if (!hasActiveMatch) {
+    return (
+      <div className="min-h-dvh flex flex-col text-on-surface pb-28 md:pb-12 pt-24">
+        <Navigation />
+        <GameEventOverlay />
+        <main className="grow w-full max-w-container-max mx-auto px-4 md:px-16 py-6 flex items-center justify-center">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="glass-strong gradient-border rounded-3xl p-10 md:p-14 text-center max-w-lg w-full relative overflow-hidden"
+          >
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 bg-secondary-container/15 blur-3xl rounded-full pointer-events-none" />
+            <div className="relative z-10 flex flex-col items-center gap-5">
+              <div className="w-20 h-20 rounded-3xl bg-secondary-container/15 border border-white/10 flex items-center justify-center animate-float">
+                <span className="material-symbols-outlined text-[44px] text-primary">stadium</span>
+              </div>
+              <h1 className="font-display-hero text-[30px] md:text-[38px] tracking-tighter bg-gradient-to-r from-white via-primary to-white bg-clip-text text-transparent leading-none">
+                Aucun match en cours
+              </h1>
+              <p className="font-body-md text-on-surface-variant text-[14px] max-w-sm">
+                En attente du lancement d&apos;une session par l&apos;équipe du bar. Les paris ouvriront dès le coup d&apos;envoi !
+              </p>
+              <span className="flex items-center gap-2 font-label-caps text-[10px] text-on-surface-variant/60 tracking-widest mt-1">
+                <span className="live-dot" /> EN ATTENTE
+              </span>
+            </div>
+          </motion.div>
+        </main>
+      </div>
+    );
+  }
+
   const handleOutcomeClick = (market: Market, outcome: Outcome) => {
-    if (market.isClosed || !market.isActive) return;
+    if (!bettingOpen || market.isClosed || !market.isActive) return;
     setSelectedMarket(market);
     setSelectedOutcome(outcome);
     setBetStatusMsg(null);
@@ -114,7 +152,7 @@ export default function HomePage() {
               <div className="flex flex-col items-center gap-3 flex-1">
                 <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-surface-container/80 flex items-center justify-center border border-white/10 text-4xl md:text-5xl shadow-[0_8px_24px_-8px_rgba(0,0,0,0.7)]">
                   <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-secondary-container/20 to-transparent" />
-                  <span className="relative">🇫🇷</span>
+                  <span className="relative">{flagFor(match.homeTeam)}</span>
                 </div>
                 <span className="font-headline-lg-mobile text-[16px] md:text-[20px] text-white text-center leading-tight">
                   {match.homeTeam}
@@ -133,7 +171,7 @@ export default function HomePage() {
               {/* Away */}
               <div className="flex flex-col items-center gap-3 flex-1">
                 <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-surface-container/80 flex items-center justify-center border border-white/10 text-4xl md:text-5xl shadow-[0_8px_24px_-8px_rgba(0,0,0,0.7)]">
-                  <span className="relative">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
+                  <span className="relative">{flagFor(match.awayTeam)}</span>
                 </div>
                 <span className="font-headline-lg-mobile text-[16px] md:text-[20px] text-on-surface-variant text-center leading-tight">
                   {match.awayTeam}
@@ -170,7 +208,22 @@ export default function HomePage() {
           {/* LEFT: markets */}
           <div className="lg:col-span-8 flex flex-col gap-5">
 
-            {doubleGainsActive && (
+            {matchFinished && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="relative overflow-hidden rounded-2xl border border-error/40 bg-gradient-to-r from-error/15 via-error/8 to-error/15 p-4 flex items-center justify-center gap-3 text-center"
+              >
+                <span className="material-symbols-outlined text-error text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  sports_score
+                </span>
+                <span className="font-headline-lg-mobile text-[15px] md:text-[16px] text-white tracking-tight">
+                  MATCH TERMINÉ · LES PARIS SONT FERMÉS — Consultez les résultats ci-dessous
+                </span>
+              </motion.div>
+            )}
+
+            {doubleGainsActive && !matchFinished && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -220,12 +273,12 @@ export default function HomePage() {
                       <button
                         key={outcome.id}
                         onClick={() => handleOutcomeClick(market, outcome)}
-                        disabled={market.isClosed || !market.isActive}
+                        disabled={!bettingOpen || market.isClosed || !market.isActive}
                         className={`group relative overflow-hidden rounded-xl p-3.5 flex flex-col gap-2 text-left transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
                           isSelected
                             ? 'bg-secondary-container/15 border border-primary/50 glow-accent'
                             : 'bg-white/[0.03] border border-white/8 hover:bg-white/[0.06] hover:border-white/15 hover:-translate-y-0.5'
-                        } ${market.isClosed ? 'opacity-40 cursor-not-allowed hover:translate-y-0' : ''}`}
+                        } ${(market.isClosed || !bettingOpen) ? 'opacity-40 cursor-not-allowed hover:translate-y-0' : ''}`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className={`font-body-md text-[14px] leading-tight ${isSelected ? 'text-white font-semibold' : 'text-on-surface'}`}>

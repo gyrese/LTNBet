@@ -30,6 +30,8 @@ export interface Match {
   shotsOnTargetHome: number;
   cornersHome: number;
   cardsHome: number;
+  finishedAt?: string | null;
+  sessionClosed?: boolean;
 }
 
 export interface Outcome {
@@ -129,8 +131,12 @@ interface GameStore {
   initFromSupabase: () => Promise<void>;
 
   match: Match;
+  hasActiveMatch: boolean;
   updateMatchStats: (stats: Partial<Match>) => void;
   triggerGoal: (team: 'home' | 'away', scorer?: string) => void;
+  endMatch: () => void;
+  closeSession: () => void;
+  resetAll: () => Promise<void>;
 
   markets: Market[];
   placeBet: (marketId: string, outcomeId: string, amount: number) => Promise<{ success: boolean; error?: string }>;
@@ -183,6 +189,8 @@ const matchFromDb = (r: any): Match => ({
   shotsOnTargetHome: r.shots_on_target_home,
   cornersHome: r.corners_home,
   cardsHome: r.cards_home,
+  finishedAt: r.finished_at ?? null,
+  sessionClosed: Boolean(r.session_closed),
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -283,15 +291,15 @@ async function dbPost(body: Record<string, unknown>) {
   return r.json();
 }
 
-// ─── INITIAL STATE (static seed, replaced by DB on mount) ────────────────────
+// ─── INITIAL STATE ───────────────────────────────────────────────────────────
 
-const INITIAL_MATCH: Match = {
-  id: 'a0000000-0000-0000-0000-000000000001',
-  homeTeam: 'France', awayTeam: 'Angleterre',
-  homeScore: 1, awayScore: 0, status: 'live',
-  startsAt: new Date(Date.now() - 65 * 60 * 1000).toISOString(),
-  betsClosedAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-  elapsedTime: 65, possessionHome: 55, shotsOnTargetHome: 4, cornersHome: 5, cardsHome: 1,
+// Placeholder « aucun match » : affiché tant que l'hôte n'a pas lancé de session.
+const NO_MATCH: Match = {
+  id: '', homeTeam: '', awayTeam: '',
+  homeScore: 0, awayScore: 0, status: 'upcoming',
+  startsAt: '', betsClosedAt: '',
+  elapsedTime: 0, possessionHome: 50, shotsOnTargetHome: 0, cornersHome: 0, cardsHome: 0,
+  finishedAt: null, sessionClosed: false,
 };
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -301,7 +309,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isUserAdmin: lsGet<boolean>('ltn_user_admin', false),
   sessionChecked: false,
   supabaseLoaded: false,
-  match: INITIAL_MATCH,
+  match: NO_MATCH,
+  hasActiveMatch: false,
   markets: [],
   myBets: lsGet<Bet[]>('ltn_user_bets', []),
   leaderboard: [],
@@ -318,8 +327,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   initFromSupabase: async () => {
     try {
       const { match, markets, bots, settings, rewards, rewardLedger } = await fetch('/api/db?op=state').then(r => r.json());
-      if (match) set({ match: matchFromDb(match) });
-      if (markets) set({ markets: markets.map(marketFromDb) });
+      if (match) set({ match: matchFromDb(match), hasActiveMatch: true });
+      else set({ match: NO_MATCH, hasActiveMatch: false });
+      set({ markets: markets ? markets.map(marketFromDb) : [] });
       if (bots) set({ leaderboard: bots.map(playerFromDb) });
       if (settings) set({ doubleGainsActive: Boolean(settings.double_gains_active) });
       if (rewards) set({ rewards });
@@ -352,7 +362,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const es = new EventSource('/api/events');
 
     es.addEventListener('match_update', (e) => {
-      set({ match: matchFromDb(JSON.parse(e.data)) });
+      set({ match: matchFromDb(JSON.parse(e.data)), hasActiveMatch: true });
     });
 
     es.addEventListener('market_update', (e) => {
@@ -402,13 +412,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ activeEvent: { ...ev, id: 'evt-' + Date.now(), timestamp: Date.now() } });
     });
 
-    // Nouveau match créé par l'admin : recharger entièrement l'état du jeu
+    // Nouveau match créé par l'admin (ou reset) : recharger entièrement l'état du jeu
     es.addEventListener('session_reset', (e) => {
       const { match, markets } = JSON.parse(e.data);
-      set({
-        match: matchFromDb(match),
-        markets: (markets as unknown[]).map(marketFromDb),
-      });
+      if (match) {
+        set({
+          match: matchFromDb(match),
+          markets: (markets as unknown[]).map(marketFromDb),
+          hasActiveMatch: true,
+        });
+      } else {
+        set({ match: NO_MATCH, markets: [], hasActiveMatch: false });
+      }
+    });
+
+    // Session clôturée (manuelle ou auto 30 min) : plus de match actif, retour à l'écran d'attente
+    es.addEventListener('session_closed', () => {
+      set({ match: NO_MATCH, markets: [], hasActiveMatch: false });
     });
   },
 
@@ -452,14 +472,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   triggerGoal: (team: 'home' | 'away', scorer?: string) => {
-    const name = scorer || (team === 'home' ? 'Équipe de France' : 'Adversaire');
     const { match } = get();
+    const teamName = team === 'home' ? match.homeTeam : match.awayTeam;
+    const name = scorer || teamName || (team === 'home' ? 'Domicile' : 'Extérieur');
     const homeScore = team === 'home' ? match.homeScore + 1 : match.homeScore;
     const awayScore = team === 'away' ? match.awayScore + 1 : match.awayScore;
     const event: GameEvent = {
       id: 'evt-' + Date.now(),
       type: 'goal',
-      title: `BUT POUR LA ${team === 'home' ? 'FRANCE' : 'ENG'} !`,
+      title: `BUT POUR ${(teamName || '').toUpperCase()} !`,
       subtitle: `${name} marque ! (${homeScore} - ${awayScore})`,
       meta: { team, scorer: name, score: `${homeScore}-${awayScore}` },
       timestamp: Date.now(),
@@ -469,11 +490,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
     dbPost({ op: 'game_event', type: 'goal', title: event.title, subtitle: event.subtitle, meta: event.meta });
   },
 
+  // Terminer le match : verrouille les paris, garde les résultats visibles
+  endMatch: () => {
+    set(s => ({ match: { ...s.match, status: 'finished', finishedAt: new Date().toISOString() } }));
+    dbPost({ op: 'end_match' });
+  },
+
+  // Fermer la session : archive JSON + clôture définitive
+  closeSession: () => {
+    dbPost({ op: 'close_session' });
+    set({ match: NO_MATCH, markets: [], hasActiveMatch: false });
+  },
+
+  // Réinitialiser entièrement (avant un nouveau match)
+  resetAll: async () => {
+    await dbPost({ op: 'reset_all' });
+    set({ match: NO_MATCH, markets: [], hasActiveMatch: false });
+  },
+
   // ── Betting ────────────────────────────────────────────────────────────────
 
   placeBet: async (marketId: string, outcomeId: string, amount: number) => {
-    const { currentUser, markets } = get();
+    const { currentUser, markets, match, hasActiveMatch } = get();
     if (!currentUser) return { success: false, error: 'Veuillez vous connecter.' };
+
+    // Verrou de session côté client (le serveur revérifie)
+    if (!hasActiveMatch) return { success: false, error: 'Aucun match en cours.' };
+    if (match.status === 'finished') return { success: false, error: 'Le match est terminé, les paris sont fermés.' };
 
     // Optimistic local check
     if (currentUser.toilesCoins < amount) return { success: false, error: 'ToilesCoins insuffisants.' };
@@ -666,7 +709,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     if (newElapsedTime === 90) {
       newStatus = 'finished';
-      get().triggerGameEvent({ type: 'finished', title: 'FIN DU MATCH ! 🏁', subtitle: `Score final : France ${match.homeScore} - ${match.awayScore} Angleterre` });
+      get().triggerGameEvent({ type: 'finished', title: 'FIN DU MATCH ! 🏁', subtitle: `Score final : ${match.homeTeam} ${match.homeScore} - ${match.awayScore} ${match.awayTeam}` });
       const fullTimeScore = `${match.homeScore}-${match.awayScore}`;
       const scoreMarket = markets.find(m => m.type === 'exact_score');
       if (scoreMarket) {

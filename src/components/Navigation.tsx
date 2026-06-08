@@ -14,7 +14,7 @@ const NAV_ITEMS = [
 
 export default function Navigation() {
   const pathname = usePathname();
-  const { currentUser, isUserAdmin } = useGameStore();
+  const { currentUser } = useGameStore();
 
   if (!currentUser) return null;
 
@@ -65,18 +65,6 @@ export default function Navigation() {
                   </Link>
                 );
               })}
-              {isUserAdmin && (
-                <Link
-                  href="/admin"
-                  className={`font-label-caps text-label-caps tracking-widest px-4 py-2.5 rounded-xl border transition-all ${
-                    pathname === '/admin'
-                      ? 'text-tertiary border-tertiary/40 bg-tertiary/10 glow-gold'
-                      : 'text-tertiary/80 border-tertiary/20 hover:bg-tertiary/10'
-                  }`}
-                >
-                  ADMIN
-                </Link>
-              )}
             </nav>
 
             {/* Balance chip */}
@@ -130,22 +118,6 @@ export default function Navigation() {
               </Link>
             );
           })}
-          {isUserAdmin && (
-            <Link
-              href="/admin"
-              className="relative flex flex-col items-center justify-center gap-1 w-[4.5rem] py-1.5 rounded-xl"
-            >
-              <span
-                className={`material-symbols-outlined relative z-10 text-[24px] transition-colors ${
-                  pathname === '/admin' ? 'text-tertiary' : 'text-tertiary/60'
-                }`}
-                style={{ fontVariationSettings: pathname === '/admin' ? "'FILL' 1" : undefined }}
-              >
-                admin_panel_settings
-              </span>
-              <span className="font-label-caps text-[9px] relative z-10 text-tertiary/70">ADMIN</span>
-            </Link>
-          )}
         </div>
       </nav>
     </>

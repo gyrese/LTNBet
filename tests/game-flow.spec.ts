@@ -95,8 +95,13 @@ test.describe('Stadium Live Game Integration Flow', () => {
     await page.goto('/admin');
     await page.waitForTimeout(500);
 
-    // Click on "Déverrouiller l'accès Admin"
-    const unlockBtn = page.locator('button:has-text("Déverrouiller l\'accès Admin")');
+    // Enter admin password
+    const pwInput = page.locator('#admin-pw');
+    await expect(pwInput).toBeVisible();
+    await pwInput.fill('toiles2024');
+
+    // Click on "Déverrouiller"
+    const unlockBtn = page.locator('button:has-text("Déverrouiller")');
     await expect(unlockBtn).toBeVisible();
     await unlockBtn.click();
 

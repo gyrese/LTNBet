@@ -7,6 +7,7 @@ import { motion as motionClient, AnimatePresence } from 'framer-motion';
 import GameEventOverlay from '@/components/GameEventOverlay';
 
 import { getAvatarConfig } from '@/lib/avatars';
+import { flagFor } from '@/lib/flags';
 
 const SLIDE_COUNT = 5;
 
@@ -137,8 +138,8 @@ export default function ScreenPage() {
 
                   <div className="flex items-center justify-between px-4">
                     <div className="flex flex-col items-center gap-4">
-                      <div className="w-24 h-24 rounded-3xl bg-surface-container/80 flex items-center justify-center text-5xl shadow-lg border border-white/10">🇫🇷</div>
-                      <span className="font-display-hero text-[30px] text-white">FRA</span>
+                      <div className="w-24 h-24 rounded-3xl bg-surface-container/80 flex items-center justify-center text-5xl shadow-lg border border-white/10">{flagFor(match.homeTeam)}</div>
+                      <span className="font-display-hero text-[30px] text-white">{(match.homeTeam || 'DOM').slice(0, 3).toUpperCase()}</span>
                     </div>
 
                     <div className="font-score-display text-[72px] flex items-center gap-3">
@@ -148,8 +149,8 @@ export default function ScreenPage() {
                     </div>
 
                     <div className="flex flex-col items-center gap-4">
-                      <div className="w-24 h-24 rounded-3xl bg-surface-container/80 flex items-center justify-center text-5xl shadow-lg border border-white/10">🏴󠁧󠁢󠁥󠁮󠁧󠁿</div>
-                      <span className="font-display-hero text-[30px] text-on-surface-variant">ENG</span>
+                      <div className="w-24 h-24 rounded-3xl bg-surface-container/80 flex items-center justify-center text-5xl shadow-lg border border-white/10">{flagFor(match.awayTeam)}</div>
+                      <span className="font-display-hero text-[30px] text-on-surface-variant">{(match.awayTeam || 'EXT').slice(0, 3).toUpperCase()}</span>
                     </div>
                   </div>
                 </div>

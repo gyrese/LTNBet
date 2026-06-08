@@ -1,19 +1,19 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useGameStore } from '@/lib/store';
-import Navigation from '@/components/Navigation';
+
+const ADMIN_PASSWORD = 'toiles2024';
 
 export default function AdminPage() {
-  const router = useRouter();
   const {
-    currentUser,
-    isUserAdmin,
-    promoteToAdmin,
     match,
+    hasActiveMatch,
     updateMatchStats,
     triggerGoal,
+    endMatch,
+    closeSession,
+    resetAll,
     markets,
     createFlashMarket,
     resolveMarket,
@@ -49,6 +49,7 @@ export default function AdminPage() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sessionSuccess, setSessionSuccess] = useState('');
+  const [sessionError, setSessionError] = useState('');
 
   const handleSearchMatch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +67,7 @@ export default function AdminPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleCreateSession = async (match: any) => {
+    setSessionError('');
     try {
       const res = await fetch('/api/db', {
         method: 'POST',
@@ -74,49 +76,95 @@ export default function AdminPage() {
       }).then(r => r.json());
       if (res.success) {
         setSessionSuccess(`Session créée avec succès pour le match ${match.homeTeam} - ${match.awayTeam} !`);
+        setSearchResults([]);
         // Refresh store
         useGameStore.getState().initFromSupabase();
         setTimeout(() => setSessionSuccess(''), 4000);
+      } else {
+        setSessionError(res.error || 'Impossible de créer la session.');
       }
     } catch (err) {
       console.error(err);
+      setSessionError('Erreur réseau lors de la création de session.');
     }
   };
 
+  // L'admin est INDÉPENDANT des comptes joueurs : accès via l'URL /admin + mot de passe (session navigateur).
   const [mounted, setMounted] = useState(false);
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [pwInput, setPwInput] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== 'undefined' && sessionStorage.getItem('ltn_admin_ok') === '1') {
+      setAdminUnlocked(true);
+    }
   }, []);
 
-  useEffect(() => {
-    if (mounted && !currentUser) {
-      router.push('/join');
+  if (!mounted) return null;
+
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pwInput === ADMIN_PASSWORD) {
+      sessionStorage.setItem('ltn_admin_ok', '1');
+      setAdminUnlocked(true);
+      setPwError('');
+    } else {
+      setPwError('Mot de passe incorrect.');
     }
-  }, [currentUser, router, mounted]);
+  };
 
-  if (!mounted || !currentUser) return null;
+  const handleLockAdmin = () => {
+    sessionStorage.removeItem('ltn_admin_ok');
+    setAdminUnlocked(false);
+    setPwInput('');
+  };
 
-  // Gate
-  if (!isUserAdmin) {
+  // Gate mot de passe
+  if (!adminUnlocked) {
     return (
       <div className="min-h-dvh flex flex-col justify-center items-center px-4">
-        <div className="glass-strong gradient-border max-w-md p-8 rounded-3xl text-center space-y-6">
+        <form onSubmit={handleUnlock} className="glass-strong gradient-border max-w-md w-full p-8 rounded-3xl text-center space-y-6">
           <div className="w-16 h-16 mx-auto rounded-2xl bg-tertiary/12 border border-tertiary/30 flex items-center justify-center">
-            <span className="material-symbols-outlined text-[36px] text-tertiary">lock</span>
+            <span className="material-symbols-outlined text-[36px] text-tertiary">shield_person</span>
           </div>
-          <h1 className="font-headline-lg italic uppercase tracking-tighter text-white">Espace Administrateur</h1>
-          <p className="font-body-md text-on-surface-variant">
-            Accès réservé au personnel du bar Les Toiles Noires pour le contrôle du match et des récompenses.
-          </p>
+          <div className="space-y-1">
+            <h1 className="font-headline-lg italic uppercase tracking-tighter text-white">Espace Administrateur</h1>
+            <p className="font-body-md text-[13px] text-on-surface-variant">
+              Accès réservé au personnel du bar. Indépendant des comptes joueurs.
+            </p>
+          </div>
+          <div className="space-y-2 text-left">
+            <label htmlFor="admin-pw" className="block font-label-caps text-[10px] text-on-surface-variant tracking-wider">
+              MOT DE PASSE
+            </label>
+            <input
+              id="admin-pw"
+              type="password"
+              value={pwInput}
+              onChange={(e) => setPwInput(e.target.value)}
+              autoFocus
+              autoComplete="current-password"
+              className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-white font-body-md placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-tertiary/60 focus:border-transparent transition-all"
+              placeholder="••••••••"
+            />
+            {pwError && (
+              <p className="text-error font-data-mono text-[12px] flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[15px]">error</span>
+                {pwError}
+              </p>
+            )}
+          </div>
           <button
-            onClick={promoteToAdmin}
+            type="submit"
             className="btn-gold w-full font-headline-lg-mobile text-[17px] py-3.5 rounded-xl cursor-pointer flex items-center justify-center gap-2"
           >
             <span className="material-symbols-outlined text-[20px]">lock_open</span>
-            Déverrouiller l&apos;accès Admin
+            Déverrouiller
           </button>
-        </div>
+        </form>
       </div>
     );
   }
@@ -151,9 +199,7 @@ export default function AdminPage() {
   const sectionHead = 'font-label-caps text-label-caps text-on-surface tracking-widest border-b border-white/10 pb-3 flex items-center gap-2.5';
 
   return (
-    <div className="min-h-dvh flex flex-col text-on-surface pb-28 md:pb-12 pt-24">
-      <Navigation />
-
+    <div className="min-h-dvh flex flex-col text-on-surface pb-12 pt-8">
       <main className="flex-grow w-full max-w-container-max mx-auto px-4 md:px-16 py-6 space-y-6">
 
         {/* Header */}
@@ -162,17 +208,27 @@ export default function AdminPage() {
             <span className="material-symbols-outlined text-[34px] text-tertiary">admin_panel_settings</span>
             Panel Admin
           </h1>
-          <button
-            onClick={() => toggleDoubleGains(!doubleGainsActive)}
-            className={`font-label-caps text-label-caps px-6 py-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 ${
-              doubleGainsActive
-                ? 'btn-gold border-transparent'
-                : 'bg-white/[0.04] border-white/10 text-on-surface-variant hover:bg-white/[0.08]'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">bolt</span>
-            {doubleGainsActive ? 'Double Gains Actif' : 'Activer Double Gains'}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => toggleDoubleGains(!doubleGainsActive)}
+              className={`font-label-caps text-label-caps px-6 py-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 ${
+                doubleGainsActive
+                  ? 'btn-gold border-transparent'
+                  : 'bg-white/[0.04] border-white/10 text-on-surface-variant hover:bg-white/[0.08]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">bolt</span>
+              {doubleGainsActive ? 'Double Gains Actif' : 'Activer Double Gains'}
+            </button>
+            <button
+              onClick={handleLockAdmin}
+              title="Verrouiller l'accès admin"
+              className="font-label-caps text-label-caps px-4 py-3 rounded-xl border border-white/10 bg-white/[0.04] text-on-surface-variant hover:bg-white/[0.08] transition-all cursor-pointer flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[18px]">lock</span>
+              Quitter
+            </button>
+          </div>
         </div>
 
         {/* Counters */}
@@ -194,7 +250,33 @@ export default function AdminPage() {
                 <span className="material-symbols-outlined text-[18px] text-tertiary">search</span>
                 RECHERCHE &amp; DÉMARRAGE DE SESSION
               </h2>
-              
+
+              {/* Match en cours */}
+              {hasActiveMatch ? (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/8 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-emerald-300 text-[26px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      stadium
+                    </span>
+                    <div>
+                      <span className="block font-label-caps text-[9px] text-emerald-300/80 tracking-widest">MATCH EN COURS</span>
+                      <span className="block font-body-md font-bold text-white text-[15px]">
+                        {match.homeTeam} {match.homeScore}-{match.awayScore} {match.awayTeam}
+                      </span>
+                    </div>
+                  </div>
+                  <span className={`font-label-caps text-[9px] px-2.5 py-1 rounded-full border self-start sm:self-center ${
+                    match.status === 'finished' ? 'bg-error/12 border-error/30 text-error' : 'bg-emerald-500/12 border-emerald-500/30 text-emerald-300'
+                  }`}>
+                    {match.status === 'finished' ? 'TERMINÉ · À ARCHIVER' : 'PARIS OUVERTS'}
+                  </span>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-3 text-center font-data-mono text-[12px] text-on-surface-variant/70">
+                  Aucune session active — recherchez un match pour démarrer.
+                </div>
+              )}
+
               <form onSubmit={handleSearchMatch} className="flex gap-2">
                 <input
                   type="text"
@@ -202,23 +284,36 @@ export default function AdminPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Chercher une équipe (ex: France, Espagne...)"
                   className={inputClass}
+                  disabled={hasActiveMatch}
                 />
                 <button
                   type="submit"
-                  disabled={searchLoading}
-                  className="bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 font-label-caps text-label-caps px-6 py-2.5 rounded-xl cursor-pointer disabled:opacity-40 transition-all"
+                  disabled={searchLoading || hasActiveMatch}
+                  className="bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 font-label-caps text-label-caps px-6 py-2.5 rounded-xl cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
                   {searchLoading ? '...' : 'Chercher'}
                 </button>
               </form>
+
+              {hasActiveMatch && (
+                <p className="font-body-md text-[11px] text-tertiary/80 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[15px]">info</span>
+                  Fermez la session en cours (ci-dessous : « Fermer &amp; archiver ») avant de lancer un autre match.
+                </p>
+              )}
 
               {sessionSuccess && (
                 <div className="bg-emerald-500/12 text-emerald-300 border border-emerald-500/25 p-3 rounded-xl text-center text-sm font-data-mono">
                   {sessionSuccess}
                 </div>
               )}
+              {sessionError && (
+                <div className="bg-error/12 text-error border border-error/25 p-3 rounded-xl text-center text-sm font-data-mono">
+                  {sessionError}
+                </div>
+              )}
 
-              {searchResults.length > 0 && (
+              {!hasActiveMatch && searchResults.length > 0 && (
                 <div className="space-y-3 pt-2">
                   <span className="block font-label-caps text-[10px] text-on-surface-variant tracking-wider">MATCHS TROUVÉS</span>
                   <div className="divide-y divide-white/5 bg-white/[0.02] border border-white/8 rounded-2xl overflow-hidden">
@@ -262,7 +357,7 @@ export default function AdminPage() {
                 <div className="space-y-2">
                   <span className="block font-label-caps text-[10px] text-on-surface-variant tracking-wider">SCORE DU MATCH</span>
                   <div className="flex items-center gap-3">
-                    {([['FRA', match.homeScore, 'home'], ['ENG', match.awayScore, 'away']] as const).map(([lbl, score, side]) => (
+                    {([[(match.homeTeam || 'DOM').slice(0, 3).toUpperCase(), match.homeScore, 'home'], [(match.awayTeam || 'EXT').slice(0, 3).toUpperCase(), match.awayScore, 'away']] as const).map(([lbl, score, side]) => (
                       <React.Fragment key={side}>
                         {side === 'away' && <span className="font-score-display text-[22px] opacity-30">:</span>}
                         <div className="flex flex-col items-center">
@@ -324,6 +419,71 @@ export default function AdminPage() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Cycle de vie de la session */}
+              <div className="border-t border-white/10 pt-5 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="font-label-caps text-[10px] text-on-surface-variant tracking-wider flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px] text-primary">flag</span>
+                    CYCLE DE VIE DE LA SESSION
+                  </span>
+                  <span className={`font-label-caps text-[9px] px-2.5 py-1 rounded-full border ${
+                    !hasActiveMatch
+                      ? 'bg-white/5 border-white/10 text-on-surface-variant'
+                      : match.status === 'finished'
+                      ? 'bg-error/12 border-error/30 text-error'
+                      : 'bg-emerald-500/12 border-emerald-500/30 text-emerald-300'
+                  }`}>
+                    {!hasActiveMatch ? 'AUCUNE SESSION' : match.status === 'finished' ? 'PARIS FERMÉS' : 'PARIS OUVERTS'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Terminer le match */}
+                  <button
+                    onClick={endMatch}
+                    disabled={!hasActiveMatch || match.status === 'finished'}
+                    className="bg-error/10 hover:bg-error/20 border border-error/30 text-error font-label-caps text-[11px] px-4 py-3 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">sports_score</span>
+                    Terminer le match
+                  </button>
+
+                  {/* Fermer la session (archive) */}
+                  <button
+                    onClick={() => { if (confirm('Fermer la session ? Les résultats seront archivés en JSON et les paris définitivement clôturés.')) closeSession(); }}
+                    disabled={!hasActiveMatch}
+                    className="bg-tertiary/10 hover:bg-tertiary/20 border border-tertiary/30 text-tertiary font-label-caps text-[11px] px-4 py-3 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">inventory_2</span>
+                    Fermer &amp; archiver
+                  </button>
+
+                  {/* Réinitialiser tout */}
+                  {!confirmReset ? (
+                    <button
+                      onClick={() => setConfirmReset(true)}
+                      className="bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-on-surface-variant font-label-caps text-[11px] px-4 py-3 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                      Réinitialiser tout
+                    </button>
+                  ) : (
+                    <button
+                      onClick={async () => { await resetAll(); setConfirmReset(false); }}
+                      className="bg-error/20 hover:bg-error/30 border border-error/50 text-error font-label-caps text-[11px] px-4 py-3 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 animate-pulse"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">warning</span>
+                      Confirmer le reset
+                    </button>
+                  )}
+                </div>
+                <p className="font-body-md text-[10px] text-on-surface-variant/50 leading-snug">
+                  <strong className="text-on-surface-variant/70">Terminer</strong> : ferme les paris, garde les résultats visibles ·
+                  <strong className="text-on-surface-variant/70"> Fermer &amp; archiver</strong> : sauvegarde JSON + clôture (auto au bout de 30 min) ·
+                  <strong className="text-on-surface-variant/70"> Réinitialiser</strong> : efface tout pour repartir à zéro.
+                </p>
               </div>
             </section>
 
@@ -440,7 +600,6 @@ export default function AdminPage() {
                   <label htmlFor="select-user" className="block font-label-caps text-[10px] text-on-surface-variant tracking-wider">JOUEUR GAGNANT</label>
                   <select id="select-user" value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} className={inputClass}>
                     <option value="">-- Choisir un joueur --</option>
-                    {currentUser && <option value={currentUser.id}>{currentUser.username} (Vous)</option>}
                     {leaderboard.map((u) => (
                       <option key={u.id} value={u.id}>{u.username} (Rang #{u.rank})</option>
                     ))}

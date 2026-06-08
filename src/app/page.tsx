@@ -1,0 +1,432 @@
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useGameStore, Market, Outcome } from '@/lib/store';
+import Navigation from '@/components/Navigation';
+import GameEventOverlay from '@/components/GameEventOverlay';
+
+export default function HomePage() {
+  const router = useRouter();
+  const {
+    currentUser,
+    match,
+    markets,
+    placeBet,
+    runSimulationStep,
+    doubleGainsActive,
+  } = useGameStore();
+
+  // Selected bet state
+  const [selectedMarket, setSelectedMarket] = useState<Market | null>(null);
+  const [selectedOutcome, setSelectedOutcome] = useState<Outcome | null>(null);
+  const [betAmount, setBetAmount] = useState<number>(100);
+  const [betStatusMsg, setBetStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser) {
+      router.push('/join');
+    }
+  }, [currentUser, router]);
+
+  // Simulateur de match toutes les 8s (simule 1 minute de match)
+  useEffect(() => {
+    if (!currentUser || match.status !== 'live') return;
+    const interval = setInterval(() => {
+      runSimulationStep();
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [currentUser, match.status, runSimulationStep]);
+
+  if (!currentUser) return null;
+
+  const handleOutcomeClick = (market: Market, outcome: Outcome) => {
+    if (market.isClosed || !market.isActive) return;
+    setSelectedMarket(market);
+    setSelectedOutcome(outcome);
+    setBetStatusMsg(null);
+    setBetAmount(Math.min(currentUser.toilesCoins, 100));
+  };
+
+  const handlePlaceBet = async () => {
+    if (!selectedMarket || !selectedOutcome || submitting) return;
+    setSubmitting(true);
+    const res = await placeBet(selectedMarket.id, selectedOutcome.id, betAmount);
+    setSubmitting(false);
+    if (res.success) {
+      setBetStatusMsg({ type: 'success', text: 'Pari validé avec succès !' });
+      setTimeout(() => {
+        setSelectedMarket(null);
+        setSelectedOutcome(null);
+        setBetStatusMsg(null);
+      }, 2000);
+    } else {
+      setBetStatusMsg({ type: 'error', text: res.error || 'Erreur lors de la validation.' });
+    }
+  };
+
+  const potentialPayout = selectedOutcome
+    ? Math.round(betAmount * selectedOutcome.currentOdds * (doubleGainsActive ? 2 : 1))
+    : 0;
+
+  const statusLabel: Record<string, string> = {
+    live: `DIRECT · ${match.elapsedTime}'`,
+    upcoming: 'AVANT-MATCH',
+    half_time: 'MI-TEMPS',
+    finished: 'TERMINÉ',
+  };
+  const matchProgress = Math.min(100, Math.round((match.elapsedTime / 90) * 100));
+
+  return (
+    <div className="min-h-dvh flex flex-col text-on-surface scanline-effect pb-28 md:pb-12 pt-24">
+      <Navigation />
+      <GameEventOverlay />
+
+      <main className="flex-grow w-full max-w-container-max mx-auto px-4 md:px-16 py-6 flex flex-col gap-6">
+
+        {/* ============ MATCH HERO ============ */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="glass-panel gradient-border rounded-3xl overflow-hidden relative"
+        >
+          {/* Pitch glow + crest backdrop */}
+          <div className="absolute inset-0 z-0 bg-gradient-to-b from-secondary-container/20 via-transparent to-transparent" />
+          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[420px] h-[220px] bg-secondary-container/25 blur-[90px] rounded-full pointer-events-none" />
+
+          <div className="relative z-10 p-6 md:p-8 flex flex-col items-center">
+            {/* Top bar: competition + live */}
+            <div className="flex items-center justify-between w-full mb-6">
+              <span className="font-label-caps text-[10px] text-on-surface-variant/70 tracking-[0.2em] hidden sm:block">
+                LES TOILES NOIRES · STADIUM LIVE
+              </span>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-error/12 border border-error/30">
+                {match.status === 'live' && <span className="live-dot" />}
+                <span className="font-label-caps text-[11px] text-on-surface tracking-widest uppercase tabular">
+                  {statusLabel[match.status]}
+                </span>
+              </div>
+            </div>
+
+            {/* Score row */}
+            <div className="flex items-center justify-between w-full max-w-xl mx-auto gap-2">
+              {/* Home */}
+              <div className="flex flex-col items-center gap-3 flex-1">
+                <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-surface-container/80 flex items-center justify-center border border-white/10 text-4xl md:text-5xl shadow-[0_8px_24px_-8px_rgba(0,0,0,0.7)]">
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-secondary-container/20 to-transparent" />
+                  <span className="relative">🇫🇷</span>
+                </div>
+                <span className="font-headline-lg-mobile text-[16px] md:text-[20px] text-white text-center leading-tight">
+                  {match.homeTeam}
+                </span>
+              </div>
+
+              {/* Score */}
+              <div className="flex flex-col items-center gap-2 px-2">
+                <div className="font-score-display text-[44px] md:text-[64px] text-white leading-none flex items-center gap-2 md:gap-3">
+                  <span className="text-glow-blue text-primary">{match.homeScore}</span>
+                  <span className="text-on-surface-variant/40 text-[28px] md:text-[40px]">:</span>
+                  <span className="text-white">{match.awayScore}</span>
+                </div>
+              </div>
+
+              {/* Away */}
+              <div className="flex flex-col items-center gap-3 flex-1">
+                <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-surface-container/80 flex items-center justify-center border border-white/10 text-4xl md:text-5xl shadow-[0_8px_24px_-8px_rgba(0,0,0,0.7)]">
+                  <span className="relative">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
+                </div>
+                <span className="font-headline-lg-mobile text-[16px] md:text-[20px] text-on-surface-variant text-center leading-tight">
+                  {match.awayTeam}
+                </span>
+              </div>
+            </div>
+
+            {/* Match progress */}
+            {(match.status === 'live' || match.status === 'half_time') && (
+              <div className="w-full max-w-md mx-auto mt-7">
+                <div className="h-1.5 w-full bg-white/8 rounded-full overflow-hidden relative">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-secondary-container to-primary rounded-full relative"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${matchProgress}%` }}
+                    transition={{ duration: 0.8, ease: 'easeOut' }}
+                  >
+                    <span className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)]" />
+                  </motion.div>
+                </div>
+                <div className="flex justify-between mt-2 font-data-mono text-[10px] text-on-surface-variant/60">
+                  <span>{"0'"}</span>
+                  <span className="text-primary">{`${match.elapsedTime}'`}</span>
+                  <span>{"90'"}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.section>
+
+        {/* ============ 2-COLUMN ============ */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+          {/* LEFT: markets */}
+          <div className="lg:col-span-8 flex flex-col gap-5">
+
+            {doubleGainsActive && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="shimmer relative overflow-hidden rounded-2xl border border-tertiary/40 bg-gradient-to-r from-tertiary/15 via-tertiary/8 to-tertiary/15 p-4 text-center"
+              >
+                <span className="relative z-10 font-headline-lg-mobile text-[16px] text-tertiary tracking-tight">
+                  🚀 MODE DOUBLE GAINS · TOUTES LES COTES ×2
+                </span>
+              </motion.div>
+            )}
+
+            {markets.map((market, mIdx) => (
+              <motion.section
+                key={market.id}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: Math.min(mIdx * 0.05, 0.25), ease: [0.16, 1, 0.3, 1] }}
+                className="glass-panel rounded-2xl p-5 md:p-6"
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-1 h-5 rounded-full bg-gradient-to-b from-primary to-secondary-container" />
+                    <h2 className="font-label-caps text-label-caps text-on-surface tracking-widest">
+                      {market.title}
+                    </h2>
+                    {market.isFlash && (
+                      <span className="font-label-caps text-[9px] text-tertiary bg-tertiary/12 border border-tertiary/30 px-2 py-0.5 rounded-full">
+                        FLASH
+                      </span>
+                    )}
+                  </div>
+                  {market.isClosed && (
+                    <span className="bg-surface-container-high text-on-surface-variant font-label-caps text-[9px] px-2.5 py-1 rounded-full border border-white/8">
+                      CLOS
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+                  {market.outcomes.map((outcome) => {
+                    const isSelected = selectedOutcome?.id === outcome.id;
+                    const displayOdds = outcome.currentOdds * (doubleGainsActive ? 2 : 1);
+                    const totalPool = market.outcomes.reduce((s, o) => s + o.totalBetAmount, 0) || 1;
+                    const share = Math.round((outcome.totalBetAmount / totalPool) * 100);
+
+                    return (
+                      <button
+                        key={outcome.id}
+                        onClick={() => handleOutcomeClick(market, outcome)}
+                        disabled={market.isClosed || !market.isActive}
+                        className={`group relative overflow-hidden rounded-xl p-3.5 flex flex-col gap-2 text-left transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
+                          isSelected
+                            ? 'bg-secondary-container/15 border border-primary/50 glow-accent'
+                            : 'bg-white/[0.03] border border-white/8 hover:bg-white/[0.06] hover:border-white/15 hover:-translate-y-0.5'
+                        } ${market.isClosed ? 'opacity-40 cursor-not-allowed hover:translate-y-0' : ''}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`font-body-md text-[14px] leading-tight ${isSelected ? 'text-white font-semibold' : 'text-on-surface'}`}>
+                            {outcome.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className={`font-data-mono text-[16px] font-bold tabular ${isSelected ? 'text-primary' : 'text-tertiary'}`}>
+                            {displayOdds.toFixed(2)}
+                          </span>
+                          <span className="font-data-mono text-[9px] text-on-surface-variant/45 tabular">
+                            {share}%
+                          </span>
+                        </div>
+                        {/* pool share bar */}
+                        <div className="h-1 w-full bg-white/6 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${isSelected ? 'bg-primary' : 'bg-secondary-container/60'}`}
+                            style={{ width: `${share}%` }}
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.section>
+            ))}
+          </div>
+
+          {/* RIGHT: bet slip + stats */}
+          <div className="lg:col-span-4 flex flex-col gap-5 lg:sticky lg:top-24">
+
+            {/* Bet slip */}
+            <section className="glass-strong rounded-2xl p-5 md:p-6 flex flex-col relative overflow-hidden">
+              <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+                <h2 className="font-label-caps text-label-caps text-on-surface flex items-center gap-2 tracking-widest">
+                  <span className="material-symbols-outlined text-[18px] text-primary">receipt_long</span>
+                  MON PARI
+                </h2>
+                {selectedOutcome && (
+                  <span className="bg-secondary-container text-white font-label-caps text-[9px] px-2.5 py-1 rounded-full">
+                    1 SÉLECTION
+                  </span>
+                )}
+              </div>
+
+              <AnimatePresence mode="wait">
+                {selectedOutcome && selectedMarket ? (
+                  <motion.div
+                    key="slip"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.25 }}
+                    className="space-y-5"
+                  >
+                    <div className="flex justify-between items-start gap-3 bg-white/[0.03] rounded-xl p-3 border border-white/8">
+                      <div>
+                        <span className="block font-body-md text-white font-semibold text-[15px] leading-tight">
+                          {selectedOutcome.name}
+                        </span>
+                        <span className="block font-label-caps text-[9px] text-on-surface-variant mt-1 tracking-wider">
+                          {selectedMarket.title}
+                        </span>
+                      </div>
+                      <span className="font-data-mono text-tertiary font-bold bg-tertiary/10 px-2.5 py-1 rounded-lg border border-tertiary/25 tabular shrink-0">
+                        {(selectedOutcome.currentOdds * (doubleGainsActive ? 2 : 1)).toFixed(2)}
+                      </span>
+                    </div>
+
+                    {/* Mise */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <label className="font-label-caps text-[10px] text-on-surface-variant tracking-wider">
+                          MONTANT DE LA MISE
+                        </label>
+                        <span className="font-data-mono text-primary font-bold tabular">{betAmount} TC</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={10}
+                        max={Math.max(10, Math.min(currentUser.toilesCoins, 500))}
+                        step={10}
+                        value={betAmount}
+                        onChange={(e) => setBetAmount(Number(e.target.value))}
+                        className="w-full h-1.5 bg-white/15 rounded-lg appearance-none cursor-pointer focus:outline-none"
+                      />
+                      <div className="flex justify-between gap-1.5">
+                        {[10, 50, 100, 250].map((amt) => (
+                          <button
+                            key={amt}
+                            onClick={() => setBetAmount(Math.min(currentUser.toilesCoins, amt))}
+                            disabled={currentUser.toilesCoins < amt}
+                            className={`flex-1 py-1.5 rounded-lg font-data-mono text-[11px] text-center border transition-all cursor-pointer tabular ${
+                              betAmount === amt
+                                ? 'bg-secondary-container/20 border-primary/50 text-primary'
+                                : 'bg-white/[0.03] border-white/10 text-on-surface-variant/70 hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed'
+                            }`}
+                          >
+                            {amt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Gain potentiel */}
+                    <div className="flex justify-between items-center bg-gradient-to-r from-tertiary/12 to-transparent p-4 rounded-xl border border-tertiary/20">
+                      <span className="font-label-caps text-[10px] text-on-surface tracking-wider">GAIN POTENTIEL</span>
+                      <span className="font-score-display text-[22px] text-tertiary text-glow tabular">
+                        {potentialPayout.toLocaleString()}
+                        <span className="text-[12px] ml-1 text-tertiary/70">TC</span>
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={handlePlaceBet}
+                      disabled={submitting}
+                      className="btn-primary w-full font-headline-lg-mobile text-[17px] py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">
+                        {submitting ? 'progress_activity' : 'bolt'}
+                      </span>
+                      {submitting ? 'Validation…' : 'Valider mon pari'}
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="empty"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="text-center py-10 text-on-surface-variant/45 font-body-md flex flex-col items-center justify-center gap-3"
+                  >
+                    <span className="material-symbols-outlined text-[44px] opacity-40">touch_app</span>
+                    <span className="text-[14px] max-w-[16rem]">Sélectionnez une cote à gauche pour composer votre pari.</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {betStatusMsg && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`mt-4 p-3 rounded-xl text-center font-data-mono text-[12px] border ${
+                    betStatusMsg.type === 'success'
+                      ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/25'
+                      : 'bg-error/12 text-error border-error/25'
+                  }`}
+                >
+                  {betStatusMsg.text}
+                </motion.div>
+              )}
+            </section>
+
+            {/* Live stats */}
+            <section className="glass-panel rounded-2xl p-5 md:p-6">
+              <h2 className="font-label-caps text-label-caps text-on-surface-variant mb-5 flex items-center gap-2 tracking-widest">
+                <span className="material-symbols-outlined text-[18px] text-primary">monitoring</span>
+                STATS DU MATCH
+              </h2>
+
+              <div className="space-y-5">
+                <StatBar label="POSSESSION" left={`${match.possessionHome}%`} right={`${100 - match.possessionHome}%`} pct={match.possessionHome} />
+                <StatBar
+                  label="TIRS CADRÉS"
+                  left={`${match.shotsOnTargetHome}`}
+                  right="2"
+                  pct={(match.shotsOnTargetHome / (match.shotsOnTargetHome + 2)) * 100}
+                />
+                <StatBar
+                  label="CORNERS"
+                  left={`${match.cornersHome}`}
+                  right="3"
+                  pct={(match.cornersHome / (match.cornersHome + 3)) * 100}
+                />
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function StatBar({ label, left, right, pct }: { label: string; left: string; right: string; pct: number }) {
+  return (
+    <div>
+      <div className="flex justify-between items-center font-data-mono text-[13px] text-on-surface mb-1.5">
+        <span className="text-primary font-bold tabular">{left}</span>
+        <span className="font-label-caps text-[9px] text-on-surface-variant tracking-widest">{label}</span>
+        <span className="text-on-surface-variant tabular">{right}</span>
+      </div>
+      <div className="h-2 w-full bg-white/8 rounded-full overflow-hidden flex">
+        <div
+          className="h-full bg-gradient-to-r from-secondary-container to-primary rounded-full transition-all duration-500"
+          style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
+        />
+      </div>
+    </div>
+  );
+}

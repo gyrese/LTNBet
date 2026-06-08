@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="fr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Stadium Live - User Profile</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Anybody:ital,wght@0,100..900;1,100..900&amp;family=Hanken+Grotesk:ital,wght@0,100..900;1,100..900&amp;family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary": "#b5c7ea",
+                      "error": "#ffb4ab",
+                      "tertiary-fixed-dim": "#e9c400",
+                      "surface-container-lowest": "#0c0f0f",
+                      "secondary": "#b6c4ff",
+                      "secondary-fixed": "#dce1ff",
+                      "inverse-primary": "#4d5f7d",
+                      "on-surface": "#e2e2e2",
+                      "on-secondary-fixed": "#001551",
+                      "on-tertiary-container": "#4c3f00",
+                      "on-primary": "#1f314d",
+                      "surface-container": "#1e2020",
+                      "inverse-surface": "#e2e2e2",
+                      "on-secondary-fixed-variant": "#0039b3",
+                      "primary-fixed": "#d6e3ff",
+                      "surface-container-low": "#1a1c1c",
+                      "on-error-container": "#ffdad6",
+                      "on-tertiary": "#3a3000",
+                      "on-primary-fixed": "#071c36",
+                      "tertiary-container": "#c9a900",
+                      "background": "#121414",
+                      "surface-variant": "#333535",
+                      "tertiary-fixed": "#ffe16d",
+                      "outline": "#8e9098",
+                      "on-tertiary-fixed": "#221b00",
+                      "on-tertiary-fixed-variant": "#544600",
+                      "surface-bright": "#37393a",
+                      "surface-tint": "#b5c7ea",
+                      "inverse-on-surface": "#2f3131",
+                      "error-container": "#93000a",
+                      "on-surface-variant": "#c4c6ce",
+                      "on-background": "#e2e2e2",
+                      "on-primary-container": "#7587a7",
+                      "on-secondary": "#002780",
+                      "tertiary": "#e9c400",
+                      "on-error": "#690005",
+                      "surface-container-highest": "#333535",
+                      "secondary-fixed-dim": "#b6c4ff",
+                      "surface-dim": "#121414",
+                      "on-secondary-container": "#e4e7ff",
+                      "surface": "#121414",
+                      "primary-fixed-dim": "#b5c7ea",
+                      "on-primary-fixed-variant": "#364764",
+                      "secondary-container": "#0356ff",
+                      "outline-variant": "#44474d",
+                      "primary-container": "#0b1f3a",
+                      "surface-container-high": "#282a2b"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "gutter": "24px",
+                      "margin-mobile": "16px",
+                      "container-max": "1440px",
+                      "margin-desktop": "64px",
+                      "unit": "8px"
+              },
+              "fontFamily": {
+                      "headline-lg-mobile": [
+                              "Anybody"
+                      ],
+                      "body-md": [
+                              "Hanken Grotesk"
+                      ],
+                      "score-display": [
+                              "Anybody"
+                      ],
+                      "body-lg": [
+                              "Hanken Grotesk"
+                      ],
+                      "display-hero": [
+                              "Anybody"
+                      ],
+                      "headline-lg": [
+                              "Anybody"
+                      ],
+                      "label-caps": [
+                              "Hanken Grotesk"
+                      ],
+                      "data-mono": [
+                              "JetBrains Mono"
+                      ]
+              },
+              "fontSize": {
+                      "headline-lg-mobile": [
+                              "32px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "1.5",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "score-display": [
+                              "56px",
+                              {
+                                      "lineHeight": "1",
+                                      "letterSpacing": "0.02em",
+                                      "fontWeight": "900"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "1.6",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "display-hero": [
+                              "72px",
+                              {
+                                      "lineHeight": "1.1",
+                                      "letterSpacing": "-0.04em",
+                                      "fontWeight": "800"
+                              }
+                      ],
+                      "headline-lg": [
+                              "40px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-caps": [
+                              "12px",
+                              {
+                                      "lineHeight": "1",
+                                      "letterSpacing": "0.1em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "data-mono": [
+                              "14px",
+                              {
+                                      "lineHeight": "1.4",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "500"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+    </script>
+<style>
+        /* Base Glassmorphism utility */
+        .glass-panel {
+            background-color: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .neon-glow-blue {
+            box-shadow: 0 0 15px rgba(0, 85, 255, 0.3);
+        }
+        
+        .neon-border-top-blue {
+            border-top: 2px solid #0055FF;
+        }
+
+        .neon-border-top-red {
+            border-top: 2px solid #E53935;
+        }
+
+        /* Subtle scanline animation */
+        @keyframes scanline {
+            0% { transform: translateY(-100%); opacity: 0; }
+            50% { opacity: 0.1; }
+            100% { transform: translateY(100vh); opacity: 0; }
+        }
+        .scanline-effect::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: rgba(255,255,255,0.2);
+            animation: scanline 8s linear infinite;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Ambient background glow */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 50% 50%, rgba(0, 85, 255, 0.05) 0%, transparent 60%);
+            z-index: -1;
+            pointer-events: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md min-h-screen relative overflow-x-hidden scanline-effect pb-32 md:pb-0 pt-24 md:pt-32">
+<!-- TopAppBar -->
+<header class="fixed w-full top-0 bg-surface/5 dark:bg-surface/5 backdrop-blur-xl border-b border-white/10 z-50 flex justify-between items-center px-margin-mobile py-unit max-w-container-max mx-auto flat no shadows hidden md:flex">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center border border-white/20">
+<span class="material-symbols-outlined text-on-secondary-container" data-icon="person" style="font-variation-settings: 'FILL' 1;">person</span>
+</div>
+<span class="font-headline-lg text-headline-lg-mobile italic uppercase tracking-tighter text-primary">STADIUM LIVE</span>
+</div>
+<!-- Desktop Navigation (Hidden on Mobile) -->
+<nav class="hidden md:flex gap-8 items-center">
+<a class="text-on-surface-variant dark:text-on-surface-variant font-label-caps text-label-caps hover:bg-white/5 transition-colors px-4 py-2 rounded-lg" href="#">BETS</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant font-label-caps text-label-caps hover:bg-white/5 transition-colors px-4 py-2 rounded-lg" href="#">RANKING</a>
+<a class="text-primary dark:text-primary font-label-caps text-label-caps px-4 py-2 rounded-lg neon-glow-blue bg-white/5" href="#">PROFILE</a>
+</nav>
+<div class="flex items-center gap-2">
+<span class="font-data-mono text-data-mono text-tertiary">1,250 TC</span>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop space-y-gutter relative z-10">
+<!-- Header Profile Section -->
+<section class="glass-panel rounded-xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-6 relative overflow-hidden">
+<!-- Background accent -->
+<div class="absolute -right-20 -top-20 w-64 h-64 bg-secondary/10 rounded-full blur-3xl"></div>
+<div class="relative group">
+<div class="w-32 h-32 rounded-full border-4 border-secondary/30 overflow-hidden relative z-10">
+<img alt="Avatar Nostradamus92" class="w-full h-full object-cover" data-alt="A cinematic, high-contrast portrait of a male gamer/sports fan in a dimly lit room illuminated by blue and red neon lights, reflecting on his face. He looks focused and intense, wearing a dark hoodie. The style is moody, premium, and evocative of e-sports broadcast graphics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB8F_lqDdgFOgyFoes0huTVHwMwCWvtaPfjAvXaWkyemkRNyDqqYYsyPJj6cvwmdyiZqbQ2IyMpJUNlqmS2OiGHpM4FzOvEhoAnOXb1vV32qgcRdwuPj8HIvnByOsLzmhkaXZJtSGZ9Lfw5NfVy9LX6ljTyXiYt6PFxT0DJejMzW7Y2fJnqO5gqN07LDABdsmXla8HtOfKvwBkynaNXMW5CuFD0FCtmEo9KGx-DK-Ran1nWHJN8DvjckAsaK_sI3T-thA8JRGBhDcM"/>
+</div>
+<!-- Rank Badge Overlay -->
+<div class="absolute -bottom-2 -right-2 w-12 h-12 bg-tertiary rounded-full flex items-center justify-center border-2 border-background z-20 shadow-[0_4px_12px_rgba(233,196,0,0.4)]">
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-on-tertiary">#4</span>
+</div>
+</div>
+<div class="text-center md:text-left flex-1">
+<h1 class="font-display-hero text-display-hero text-on-surface mb-2 tracking-tighter">Nostradamus92</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant flex items-center justify-center md:justify-start gap-2">
+<span class="material-symbols-outlined text-secondary" style="font-size: 16px;">military_tech</span>
+                    ELITE PREDICTOR TIER
+                </p>
+</div>
+</section>
+<!-- Stats Bento Grid -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-unit md:gap-gutter">
+<!-- Total Gains -->
+<div class="glass-panel rounded-xl p-6 neon-border-top-blue relative overflow-hidden group hover:bg-white/10 transition-colors">
+<div class="absolute right-0 bottom-0 opacity-10 transform translate-x-4 translate-y-4">
+<span class="material-symbols-outlined text-9xl">monetization_on</span>
+</div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-4">TOTAL GAINS</h3>
+<p class="font-score-display text-score-display text-tertiary">4,500 <span class="text-2xl text-tertiary-fixed-dim">TC</span></p>
+</div>
+<!-- Success Rate -->
+<div class="glass-panel rounded-xl p-6 neon-border-top-blue relative overflow-hidden group hover:bg-white/10 transition-colors">
+<div class="absolute right-0 bottom-0 opacity-10 transform translate-x-4 translate-y-4">
+<span class="material-symbols-outlined text-9xl">trending_up</span>
+</div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-4">SUCCESS RATE</h3>
+<p class="font-score-display text-score-display text-primary">68%</p>
+</div>
+<!-- Best Bet -->
+<div class="glass-panel rounded-xl p-6 neon-border-top-red relative overflow-hidden group hover:bg-white/10 transition-colors md:col-span-1">
+<div class="absolute right-0 bottom-0 opacity-10 transform translate-x-4 translate-y-4">
+<span class="material-symbols-outlined text-9xl">sports_soccer</span>
+</div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-4">BEST BET</h3>
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full overflow-hidden bg-white/10 flex items-center justify-center border border-white/20">
+<!-- Placeholder flag icon logic -->
+<span class="font-headline-lg-mobile text-headline-lg-mobile">🇫🇷</span>
+</div>
+<div>
+<p class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-1">FRA 2 - 1 ENG</p>
+<p class="font-data-mono text-data-mono text-tertiary">Odds: x4.50</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Badges Section -->
+<section class="space-y-4">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Achievements</h2>
+<div class="flex flex-wrap gap-4">
+<!-- Badge 1 -->
+<div class="glass-panel rounded-full px-6 py-3 flex items-center gap-3 border-tertiary/30 shadow-[0_0_15px_rgba(233,196,0,0.15)] group hover:scale-105 transition-transform cursor-pointer">
+<div class="w-8 h-8 rounded-full bg-gradient-to-br from-tertiary to-tertiary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-tertiary" style="font-size: 20px;">emoji_events</span>
+</div>
+<span class="font-body-md text-body-md font-bold text-on-surface">Roi du Prono</span>
+</div>
+<!-- Badge 2 -->
+<div class="glass-panel rounded-full px-6 py-3 flex items-center gap-3 border-secondary/30 shadow-[0_0_15px_rgba(0,85,255,0.15)] group hover:scale-105 transition-transform cursor-pointer">
+<div class="w-8 h-8 rounded-full bg-gradient-to-br from-secondary to-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-secondary" style="font-size: 20px;">hub</span>
+</div>
+<span class="font-body-md text-body-md font-bold text-on-surface">Maître des Toiles</span>
+</div>
+<!-- Badge 3 -->
+<div class="glass-panel rounded-full px-6 py-3 flex items-center gap-3 border-[#0055FF]/30 shadow-[0_0_15px_rgba(0,85,255,0.2)] group hover:scale-105 transition-transform cursor-pointer">
+<div class="w-8 h-8 rounded-full bg-[#0055FF] flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-size: 20px;">visibility</span>
+</div>
+<span class="font-body-md text-body-md font-bold text-on-surface">Oracle Bleu</span>
+</div>
+</div>
+</section>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
+<!-- Recent History -->
+<section class="lg:col-span-2 space-y-4">
+<div class="flex justify-between items-end mb-4">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Recent History</h2>
+<button class="font-label-caps text-label-caps text-secondary hover:text-primary transition-colors">VIEW ALL</button>
+</div>
+<div class="space-y-unit">
+<!-- History Item 1 (Won) -->
+<div class="glass-panel rounded-lg p-4 flex items-center justify-between hover:bg-white/10 transition-colors cursor-pointer border-l-4 border-l-green-500">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+<span class="material-symbols-outlined text-on-surface-variant">sports_soccer</span>
+</div>
+<div>
+<p class="font-body-md text-body-md font-bold text-on-surface">PSG vs OM</p>
+<p class="font-data-mono text-data-mono text-on-surface-variant">Prediction: PSG Win</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-data-mono text-data-mono text-green-400">+450 TC</p>
+<span class="inline-block px-2 py-1 rounded bg-green-500/20 text-green-400 font-label-caps text-label-caps mt-1">WON</span>
+</div>
+</div>
+<!-- History Item 2 (Lost) -->
+<div class="glass-panel rounded-lg p-4 flex items-center justify-between hover:bg-white/10 transition-colors cursor-pointer border-l-4 border-l-error">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+<span class="material-symbols-outlined text-on-surface-variant">sports_basketball</span>
+</div>
+<div>
+<p class="font-body-md text-body-md font-bold text-on-surface">Lakers vs Celtics</p>
+<p class="font-data-mono text-data-mono text-on-surface-variant">Prediction: Under 210.5</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-data-mono text-data-mono text-error">-100 TC</p>
+<span class="inline-block px-2 py-1 rounded bg-error/20 text-error font-label-caps text-label-caps mt-1">LOST</span>
+</div>
+</div>
+<!-- History Item 3 (Won) -->
+<div class="glass-panel rounded-lg p-4 flex items-center justify-between hover:bg-white/10 transition-colors cursor-pointer border-l-4 border-l-green-500">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+<span class="material-symbols-outlined text-on-surface-variant">sports_tennis</span>
+</div>
+<div>
+<p class="font-body-md text-body-md font-bold text-on-surface">Alcaraz vs Sinner</p>
+<p class="font-data-mono text-data-mono text-on-surface-variant">Prediction: 3 Sets</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-data-mono text-data-mono text-green-400">+220 TC</p>
+<span class="inline-block px-2 py-1 rounded bg-green-500/20 text-green-400 font-label-caps text-label-caps mt-1">WON</span>
+</div>
+</div>
+</div>
+</section>
+<!-- QR Code Section -->
+<section class="lg:col-span-1">
+<div class="glass-panel rounded-xl p-8 flex flex-col items-center text-center relative overflow-hidden h-full justify-center group border-[#0055FF]/30">
+<!-- Neon hover effect -->
+<div class="absolute inset-0 bg-gradient-to-t from-[#0055FF]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-2">Inviter un ami</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6">Scan to share your elite status and earn bonus TC.</p>
+<div class="w-48 h-48 bg-white p-4 rounded-lg shadow-[0_0_20px_rgba(255,255,255,0.2)] mb-6 relative">
+<!-- Simulated QR Code pattern -->
+<div class="w-full h-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiNmZmZmZmYiLz48cGF0aCBkPSJNMCAwaDEwdjEwSDB6bTIwIDBoMTB2MTBoLTEwem0yMCAwaDEwdjEwSDB6IiBmaWxsPSIjMDAwMDAwIi8+PC9zdmc+')] bg-repeat bg-[length:10px_10px] opacity-80" style="background-image: repeating-linear-gradient(45deg, #000 0, #000 10px, #fff 10px, #fff 20px);">
+<!-- We use a CSS pattern instead of an actual image to avoid base64 bloat per instructions, simulating a high-contrast QR block -->
+<div class="w-full h-full grid grid-cols-4 grid-rows-4 gap-1">
+<div class="bg-black col-span-2 row-span-2 rounded-sm border-4 border-white"></div>
+<div class="bg-black rounded-sm"></div>
+<div class="bg-black rounded-sm"></div>
+<div class="bg-black rounded-sm"></div>
+<div class="bg-black col-span-2 row-span-2 rounded-sm border-4 border-white"></div>
+<div class="bg-black rounded-sm"></div>
+<div class="bg-black rounded-sm"></div>
+<div class="bg-black rounded-sm"></div>
+</div>
+</div>
+</div>
+<button class="w-full bg-[#0055FF] text-white font-label-caps text-label-caps py-4 rounded-lg shadow-[inset_0_0_10px_rgba(255,255,255,0.3)] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,85,255,0.6)] transition-all duration-300">
+                        SHARE LINK
+                    </button>
+</div>
+</section>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="fixed bottom-0 w-full flex justify-around items-center px-4 pb-6 pt-2 bg-surface/5 dark:bg-surface/5 backdrop-blur-xl border-t border-white/10 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] z-50 md:hidden">
+<a class="flex flex-col items-center justify-center text-on-surface-variant/60 dark:text-on-surface-variant/60 hover:bg-white/5 transition-colors p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="sports_soccer">sports_soccer</span>
+<span class="font-label-caps text-label-caps">BETS</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant/60 dark:text-on-surface-variant/60 hover:bg-white/5 transition-colors p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="leaderboard">leaderboard</span>
+<span class="font-label-caps text-label-caps">RANKING</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary drop-shadow-[0_0_10px_rgba(182,196,255,0.4)] scale-110 duration-200 ease-out p-2 rounded-lg relative" href="#">
+<span class="absolute inset-0 bg-secondary/10 rounded-full blur-md"></span>
+<span class="material-symbols-outlined mb-1 relative z-10" data-icon="person" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-label-caps text-label-caps relative z-10">PROFILE</span>
+</a>
+</nav>
+</body></html>

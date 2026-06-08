@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Les Toiles Noires Predictor</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Anybody:ital,wght@0,100..900;1,100..900&amp;family=Hanken+Grotesk:ital,wght@0,100..900;1,100..900&amp;family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary": "#b5c7ea",
+                    "error": "#ffb4ab",
+                    "tertiary-fixed-dim": "#e9c400",
+                    "surface-container-lowest": "#0c0f0f",
+                    "secondary": "#b6c4ff",
+                    "secondary-fixed": "#dce1ff",
+                    "inverse-primary": "#4d5f7d",
+                    "on-surface": "#e2e2e2",
+                    "on-secondary-fixed": "#001551",
+                    "on-tertiary-container": "#4c3f00",
+                    "on-primary": "#1f314d",
+                    "surface-container": "#1e2020",
+                    "inverse-surface": "#e2e2e2",
+                    "on-secondary-fixed-variant": "#0039b3",
+                    "primary-fixed": "#d6e3ff",
+                    "surface-container-low": "#1a1c1c",
+                    "on-error-container": "#ffdad6",
+                    "on-tertiary": "#3a3000",
+                    "on-primary-fixed": "#071c36",
+                    "tertiary-container": "#c9a900",
+                    "background": "#121414",
+                    "surface-variant": "#333535",
+                    "tertiary-fixed": "#ffe16d",
+                    "outline": "#8e9098",
+                    "on-tertiary-fixed": "#221b00",
+                    "on-tertiary-fixed-variant": "#544600",
+                    "surface-bright": "#37393a",
+                    "surface-tint": "#b5c7ea",
+                    "inverse-on-surface": "#2f3131",
+                    "error-container": "#93000a",
+                    "on-surface-variant": "#c4c6ce",
+                    "on-background": "#e2e2e2",
+                    "on-primary-container": "#7587a7",
+                    "on-secondary": "#002780",
+                    "tertiary": "#e9c400",
+                    "on-error": "#690005",
+                    "surface-container-highest": "#333535",
+                    "secondary-fixed-dim": "#b6c4ff",
+                    "surface-dim": "#121414",
+                    "on-secondary-container": "#e4e7ff",
+                    "surface": "#121414",
+                    "primary-fixed-dim": "#b5c7ea",
+                    "on-primary-fixed-variant": "#364764",
+                    "secondary-container": "#0356ff",
+                    "outline-variant": "#44474d",
+                    "primary-container": "#0b1f3a",
+                    "surface-container-high": "#282a2b"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "gutter": "24px",
+                    "margin-mobile": "16px",
+                    "container-max": "1440px",
+                    "margin-desktop": "64px",
+                    "unit": "8px"
+            },
+            "fontFamily": {
+                    "headline-lg-mobile": [
+                            "Anybody"
+                    ],
+                    "body-md": [
+                            "Hanken Grotesk"
+                    ],
+                    "score-display": [
+                            "Anybody"
+                    ],
+                    "body-lg": [
+                            "Hanken Grotesk"
+                    ],
+                    "display-hero": [
+                            "Anybody"
+                    ],
+                    "headline-lg": [
+                            "Anybody"
+                    ],
+                    "label-caps": [
+                            "Hanken Grotesk"
+                    ],
+                    "data-mono": [
+                            "JetBrains Mono"
+                    ]
+            },
+            "fontSize": {
+                    "headline-lg-mobile": [
+                            "32px",
+                            {
+                                    "lineHeight": "1.2",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "1.5",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "score-display": [
+                            "56px",
+                            {
+                                    "lineHeight": "1",
+                                    "letterSpacing": "0.02em",
+                                    "fontWeight": "900"
+                            }
+                    ],
+                    "body-lg": [
+                            "18px",
+                            {
+                                    "lineHeight": "1.6",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "display-hero": [
+                            "72px",
+                            {
+                                    "lineHeight": "1.1",
+                                    "letterSpacing": "-0.04em",
+                                    "fontWeight": "800"
+                            }
+                    ],
+                    "headline-lg": [
+                            "40px",
+                            {
+                                    "lineHeight": "1.2",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "label-caps": [
+                            "12px",
+                            {
+                                    "lineHeight": "1",
+                                    "letterSpacing": "0.1em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "data-mono": [
+                            "14px",
+                            {
+                                    "lineHeight": "1.4",
+                                    "letterSpacing": "0.05em",
+                                    "fontWeight": "500"
+                            }
+                    ]
+            }
+    },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0c0f0f; /* surface-container-lowest */
+            color: #e2e2e2; /* on-surface */
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glow-accent {
+            box-shadow: 0 0 15px rgba(0, 85, 255, 0.3);
+        }
+        .text-glow {
+            text-shadow: 0 0 10px rgba(233, 196, 0, 0.5);
+        }
+        /* Custom range slider styling */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #b5c7ea;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(181, 199, 234, 0.5);
+            margin-top: -10px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-md text-body-md antialiased min-h-screen flex flex-col relative pb-24 md:pb-0">
+<!-- TopAppBar (Web & Mobile) -->
+<header class="bg-surface/5 dark:bg-surface/5 backdrop-blur-xl docked full-width top-0 border-b border-white/10 flat no shadows flex justify-between items-center w-full px-margin-mobile py-unit max-w-container-max mx-auto z-50 sticky">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center border border-tertiary-fixed-dim/50 relative overflow-hidden" data-alt="A macro shot of a sleek, dark metallic user avatar ring with a glowing gold #14 rank badge. The lighting is cinematic, highlighting the polished texture of the metal and the vibrant contrast of the gold against deep shadows. The overall mood is competitive, premium, and intense, fitting a high-end gaming interface.">
+<span class="material-symbols-outlined text-tertiary" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+<span class="absolute bottom-0 right-0 bg-surface text-tertiary font-data-mono text-[10px] px-1 rounded-sm border border-tertiary/20">#14</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg-mobile italic uppercase tracking-tighter text-primary">STADIUM LIVE</h1>
+</div>
+<div class="flex items-center gap-2">
+<div class="flex flex-col items-end">
+<span class="font-label-caps text-label-caps text-on-surface-variant">BALANCE</span>
+<span class="font-data-mono text-data-mono text-primary font-bold">1,250 TC</span>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow w-full max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-6 flex flex-col gap-gutter">
+<!-- Live Match Hero Card -->
+<section class="glass-panel rounded-xl overflow-hidden relative border-t-2 border-t-error">
+<div class="absolute inset-0 bg-gradient-to-b from-surface-container/80 to-background/90 z-0"></div>
+<div class="relative z-10 p-6 flex flex-col items-center">
+<div class="flex items-center gap-2 mb-4">
+<div class="w-3 h-3 rounded-full bg-error animate-pulse"></div>
+<span class="font-label-caps text-label-caps text-on-surface tracking-widest">LIVE • 65'</span>
+</div>
+<div class="flex items-center justify-between w-full max-w-md mx-auto">
+<!-- Team 1 -->
+<div class="flex flex-col items-center gap-2">
+<div class="w-16 h-16 rounded-full bg-surface flex items-center justify-center border border-white/10 overflow-hidden" data-alt="A highly detailed, cinematic render of the French national football team crest. The logo is embossed on a dark, textured metallic surface, illuminated by a dynamic blue spotlight that casts dramatic shadows. The mood is intense and competitive, fitting a high-stakes sports predictor interface.">
+<span class="font-headline-lg text-headline-lg-mobile text-primary">FR</span>
+</div>
+<span class="font-headline-lg text-headline-lg-mobile text-on-surface">France</span>
+</div>
+<!-- Score -->
+<div class="flex flex-col items-center">
+<span class="font-score-display text-score-display text-primary">1 - 0</span>
+</div>
+<!-- Team 2 -->
+<div class="flex flex-col items-center gap-2">
+<div class="w-16 h-16 rounded-full bg-surface flex items-center justify-center border border-white/10 overflow-hidden" data-alt="A highly detailed, cinematic render of the England national football team crest. The logo is embossed on a dark, textured metallic surface, illuminated by a dynamic white spotlight that casts dramatic shadows. The mood is intense and competitive, fitting a high-stakes sports predictor interface.">
+<span class="font-headline-lg text-headline-lg-mobile text-on-surface-variant">EN</span>
+</div>
+<span class="font-headline-lg text-headline-lg-mobile text-on-surface-variant">England</span>
+</div>
+</div>
+<div class="mt-6 bg-surface/50 border border-white/5 rounded-full px-4 py-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary-fixed-dim text-sm">timer</span>
+<span class="font-data-mono text-data-mono text-tertiary-fixed-dim">Paris ferment dans <span class="text-white font-bold animate-pulse">5:42</span></span>
+</div>
+</div>
+</section>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- Left Column: Markets -->
+<div class="col-span-1 md:col-span-8 flex flex-col gap-gutter">
+<!-- Match Result -->
+<section class="glass-panel rounded-lg p-6">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant mb-4">RESULTAT DU MATCH</h2>
+<div class="grid grid-cols-3 gap-4">
+<button class="glass-panel rounded-md p-4 flex flex-col items-center justify-center hover:bg-white/5 transition-colors group relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-secondary-container">
+<div class="absolute inset-0 bg-secondary-container/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<span class="font-body-lg text-body-lg text-on-surface mb-1">France</span>
+<span class="font-data-mono text-data-mono text-tertiary">1.40</span>
+</button>
+<button class="glass-panel rounded-md p-4 flex flex-col items-center justify-center hover:bg-white/5 transition-colors group relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-secondary-container">
+<div class="absolute inset-0 bg-secondary-container/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<span class="font-body-lg text-body-lg text-on-surface mb-1">Nul</span>
+<span class="font-data-mono text-data-mono text-tertiary">3.20</span>
+</button>
+<button class="glass-panel rounded-md p-4 flex flex-col items-center justify-center hover:bg-white/5 transition-colors group relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-secondary-container">
+<div class="absolute inset-0 bg-secondary-container/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<span class="font-body-lg text-body-lg text-on-surface mb-1">England</span>
+<span class="font-data-mono text-data-mono text-tertiary">5.50</span>
+</button>
+</div>
+</section>
+<!-- Exact Score -->
+<section class="glass-panel rounded-lg p-6">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant mb-4">SCORE EXACT</h2>
+<div class="grid grid-cols-4 sm:grid-cols-6 gap-2">
+<!-- Simulated active state -->
+<button class="glass-panel rounded-md py-2 px-1 flex flex-col items-center border-secondary-container glow-accent bg-secondary-container/10">
+<span class="font-body-md text-body-md text-on-surface font-bold">1-0</span>
+<span class="font-data-mono text-data-mono text-tertiary text-[10px]">2.10</span>
+</button>
+<button class="glass-panel rounded-md py-2 px-1 flex flex-col items-center hover:bg-white/5">
+<span class="font-body-md text-body-md text-on-surface">2-0</span>
+<span class="font-data-mono text-data-mono text-tertiary text-[10px]">4.50</span>
+</button>
+<button class="glass-panel rounded-md py-2 px-1 flex flex-col items-center hover:bg-white/5">
+<span class="font-body-md text-body-md text-on-surface">2-1</span>
+<span class="font-data-mono text-data-mono text-tertiary text-[10px]">6.00</span>
+</button>
+<button class="glass-panel rounded-md py-2 px-1 flex flex-col items-center hover:bg-white/5">
+<span class="font-body-md text-body-md text-on-surface">3-0</span>
+<span class="font-data-mono text-data-mono text-tertiary text-[10px]">8.50</span>
+</button>
+<button class="glass-panel rounded-md py-2 px-1 flex flex-col items-center hover:bg-white/5">
+<span class="font-body-md text-body-md text-on-surface">1-1</span>
+<span class="font-data-mono text-data-mono text-tertiary text-[10px]">5.00</span>
+</button>
+<button class="glass-panel rounded-md py-2 px-1 flex flex-col items-center hover:bg-white/5">
+<span class="font-body-md text-body-md text-on-surface">0-1</span>
+<span class="font-data-mono text-data-mono text-tertiary text-[10px]">9.00</span>
+</button>
+</div>
+</section>
+</div>
+<!-- Right Column: Bet Slip & Stats -->
+<div class="col-span-1 md:col-span-4 flex flex-col gap-gutter">
+<!-- Bet Slip Widget -->
+<section class="glass-panel rounded-xl p-6 flex flex-col sticky top-[100px]">
+<div class="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+<h2 class="font-label-caps text-label-caps text-on-surface">MON PARI</h2>
+<span class="bg-secondary-container text-white font-data-mono text-[10px] px-2 py-1 rounded-sm">1 SÉLECTION</span>
+</div>
+<div class="flex justify-between items-start mb-6">
+<div>
+<span class="block font-body-md text-body-md text-on-surface font-bold">France gagne</span>
+<span class="block font-label-caps text-label-caps text-on-surface-variant mt-1">Résultat du match</span>
+</div>
+<span class="font-data-mono text-data-mono text-tertiary font-bold bg-surface/50 px-2 py-1 rounded border border-white/5">1.40</span>
+</div>
+<div class="mb-6">
+<div class="flex justify-between items-center mb-2">
+<label class="font-label-caps text-label-caps text-on-surface-variant">MISE (TC)</label>
+<span class="font-data-mono text-data-mono text-primary font-bold">100</span>
+</div>
+<input class="w-full appearance-none bg-transparent h-6 mb-4" max="500" min="10" type="range" value="100"/>
+<div class="flex justify-between gap-2">
+<button class="flex-1 bg-surface/50 hover:bg-surface border border-white/10 rounded py-1 font-data-mono text-data-mono text-on-surface-variant">10</button>
+<button class="flex-1 bg-surface/50 hover:bg-surface border border-white/10 rounded py-1 font-data-mono text-data-mono text-on-surface-variant">50</button>
+<button class="flex-1 bg-secondary-container/20 border border-secondary-container rounded py-1 font-data-mono text-data-mono text-primary">100</button>
+<button class="flex-1 bg-surface/50 hover:bg-surface border border-white/10 rounded py-1 font-data-mono text-data-mono text-on-surface-variant">250</button>
+</div>
+</div>
+<div class="flex justify-between items-center bg-surface-container-low p-4 rounded-lg border border-white/5 mb-6">
+<span class="font-label-caps text-label-caps text-on-surface">GAIN POTENTIEL</span>
+<span class="font-data-mono text-data-mono text-tertiary font-bold text-glow">140 TC</span>
+</div>
+<button class="w-full bg-secondary-container hover:bg-secondary-container/90 text-white font-headline-lg text-body-lg py-4 rounded-lg shadow-[0_0_20px_rgba(3,86,255,0.4)] transition-transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">check_circle</span>
+                        Valider mon pari
+                    </button>
+</section>
+<!-- Live Stats -->
+<section class="glass-panel rounded-lg p-6">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">monitoring</span>
+                        LIVE STATS
+                    </h2>
+<div class="flex flex-col gap-4">
+<!-- Stat Row 1 -->
+<div>
+<div class="flex justify-between font-data-mono text-data-mono text-on-surface mb-1">
+<span>55%</span>
+<span class="font-label-caps text-[10px] text-on-surface-variant">POSSESSION</span>
+<span>45%</span>
+</div>
+<div class="h-2 w-full bg-surface-container-highest rounded-full flex overflow-hidden">
+<div class="h-full bg-primary w-[55%] relative">
+<div class="absolute right-0 top-0 bottom-0 w-4 bg-gradient-to-r from-transparent to-white/50"></div>
+</div>
+<div class="h-full bg-outline-variant w-[45%]"></div>
+</div>
+</div>
+<!-- Stat Row 2 -->
+<div>
+<div class="flex justify-between font-data-mono text-data-mono text-on-surface mb-1">
+<span>4</span>
+<span class="font-label-caps text-[10px] text-on-surface-variant">TIRS CADRÉS</span>
+<span>2</span>
+</div>
+<div class="h-2 w-full bg-surface-container-highest rounded-full flex overflow-hidden justify-between gap-1">
+<div class="flex-1 flex justify-end">
+<div class="h-full bg-primary w-[66%] rounded-l-full relative">
+<div class="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-l from-transparent to-white/50"></div>
+</div>
+</div>
+<div class="flex-1 flex justify-start">
+<div class="h-full bg-outline-variant w-[33%] rounded-r-full"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden bg-surface/5 dark:bg-surface/5 backdrop-blur-xl fixed full-width bottom-0 z-50 border-t border-white/10 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] w-full flex justify-around items-center px-4 pb-6 pt-2">
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary drop-shadow-[0_0_10px_rgba(182,196,255,0.4)] hover:bg-white/5 scale-110 duration-200 ease-out p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">sports_soccer</span>
+<span class="font-label-caps text-[10px]">BETS</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant/60 dark:text-on-surface-variant/60 hover:bg-white/5 p-2 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">leaderboard</span>
+<span class="font-label-caps text-[10px]">RANKING</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant/60 dark:text-on-surface-variant/60 hover:bg-white/5 p-2 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">person</span>
+<span class="font-label-caps text-[10px]">PROFILE</span>
+</a>
+</nav>
+</body></html>

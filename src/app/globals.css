@@ -1,0 +1,458 @@
+@import "tailwindcss";
+
+@theme {
+  /* ---------- Fonts ---------- */
+  --font-anybody: var(--font-anybody), sans-serif;
+  --font-hanken: var(--font-hanken), sans-serif;
+  --font-jetbrains: var(--font-jetbrains), monospace;
+
+  /* ====================================================================
+     COLOR SYSTEM — "Cinematic Broadcast" Midnight Navy
+     Token names are preserved (so the whole app re-themes), but the
+     values are upgraded from washed-out grey to a rich, premium navy
+     with electric-blue + gold accents. All on-* pairs hit AA contrast.
+     ==================================================================== */
+
+  /* Accent (electric periwinkle blue — reads great as text on navy) */
+  --color-primary: #7da4ff;
+  --color-on-primary: #07142e;
+  --color-primary-container: #16284f;
+  --color-on-primary-container: #c3d4ff;
+
+  /* Secondary (vivid France-blue — used for solid CTAs) */
+  --color-secondary: #9db4ff;
+  --color-on-secondary: #001a55;
+  --color-secondary-container: #2b5bff;
+  --color-on-secondary-container: #e6ecff;
+
+  /* Tertiary (premium gold) */
+  --color-tertiary: #f6c648;
+  --color-on-tertiary: #2c2200;
+  --color-tertiary-container: #c79b1e;
+  --color-on-tertiary-container: #4a3a00;
+  --color-tertiary-fixed-dim: #f6c648;
+
+  /* Backgrounds & surfaces (layered navy elevation) */
+  --color-background: #080d1a;
+  --color-on-background: #eaeef9;
+
+  --color-surface: #0a1124;
+  --color-on-surface: #eaeef9;
+  --color-surface-variant: #1a2342;
+  --color-on-surface-variant: #a4b2d4;
+  --color-surface-bright: #283457;
+  --color-surface-dim: #070b16;
+
+  --color-surface-container-lowest: #070b16;
+  --color-surface-container-low: #0d1428;
+  --color-surface-container: #121b34;
+  --color-surface-container-high: #18233f;
+  --color-surface-container-highest: #212e4e;
+
+  --color-outline: #66739a;
+  --color-outline-variant: #2c3859;
+
+  /* Error / live */
+  --color-error: #ff8a87;
+  --color-on-error: #5c0006;
+  --color-error-container: #8c0009;
+  --color-on-error-container: #ffdad6;
+
+  /* Brand fixed accents */
+  --color-france-blue: #2b5bff;
+  --color-france-red: #ff3b47;
+  --color-france-white: #ffffff;
+  --color-gold: #ffd24a;
+
+  /* ---------- Animations ---------- */
+  --animate-ticker: ticker 28s linear infinite;
+  --animate-pulse-glow: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-shimmer: shimmer 2.4s linear infinite;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-gradient-pan: gradient-pan 6s ease infinite;
+  --animate-aurora: aurora 18s ease-in-out infinite;
+  --animate-rise: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ===================================================================
+   BASE
+   =================================================================== */
+:root {
+  background-color: #070b16;
+  color: #eaeef9;
+  min-height: 100vh;
+  color-scheme: dark;
+  --grain-opacity: 0.035;
+}
+
+body {
+  font-family: var(--font-hanken);
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Premium layered "stadium night" backdrop applied app-wide.
+   Fixed so it never scrolls; sits behind all content. */
+.app-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(43, 91, 255, 0.22), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 100% 0%, rgba(246, 198, 72, 0.07), transparent 55%),
+    radial-gradient(ellipse 80% 60% at 0% 30%, rgba(43, 91, 255, 0.10), transparent 55%),
+    radial-gradient(ellipse 100% 80% at 50% 110%, rgba(255, 59, 71, 0.08), transparent 60%),
+    linear-gradient(180deg, #0a1124 0%, #070b16 55%, #060912 100%);
+  pointer-events: none;
+}
+
+/* Soft moving aurora wash for depth */
+.app-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(40% 40% at 20% 30%, rgba(43, 91, 255, 0.18), transparent 70%),
+    radial-gradient(35% 35% at 80% 60%, rgba(125, 164, 255, 0.12), transparent 70%);
+  filter: blur(40px);
+  animation: var(--animate-aurora);
+  opacity: 0.7;
+}
+
+/* Fine film grain to kill banding and add a tactile, expensive feel */
+.app-grain {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ===================================================================
+   GLASS SYSTEM — refined frosted surfaces with gradient hairline edge
+   =================================================================== */
+.glass-panel {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 40px -24px rgba(0, 0, 0, 0.85);
+}
+
+/* Stronger, more opaque variant for floating panels / bet slips */
+.glass-strong {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(28, 40, 72, 0.72), rgba(12, 19, 38, 0.78));
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+    0 30px 60px -28px rgba(0, 0, 0, 0.9);
+}
+
+/* Animated gradient-border wrapper for premium / hero cards */
+.gradient-border {
+  position: relative;
+  isolation: isolate;
+}
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(125, 164, 255, 0.6),
+    rgba(255, 255, 255, 0.05) 35%,
+    rgba(246, 198, 72, 0.45) 70%,
+    rgba(125, 164, 255, 0.5)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ===================================================================
+   GLOWS & ACCENT EDGES
+   =================================================================== */
+.neon-glow-primary {
+  box-shadow: 0 0 0 1px rgba(125, 164, 255, 0.25), 0 0 22px rgba(43, 91, 255, 0.35);
+}
+.neon-glow-tertiary {
+  box-shadow: 0 0 0 1px rgba(246, 198, 72, 0.3), 0 0 26px rgba(246, 198, 72, 0.4);
+}
+.glow-accent {
+  box-shadow: 0 0 0 1px rgba(125, 164, 255, 0.45), 0 0 26px rgba(43, 91, 255, 0.45);
+}
+.glow-gold {
+  box-shadow: 0 0 0 1px rgba(246, 198, 72, 0.45), 0 0 30px rgba(246, 198, 72, 0.4);
+}
+.text-glow {
+  text-shadow: 0 0 18px rgba(246, 198, 72, 0.5);
+}
+.text-glow-blue {
+  text-shadow: 0 0 18px rgba(125, 164, 255, 0.55);
+}
+
+.neon-border-top-blue {
+  border-top: 2px solid transparent;
+  border-image: linear-gradient(90deg, transparent, #2b5bff, transparent) 1;
+}
+.neon-border-top-red {
+  border-top: 2px solid transparent;
+  border-image: linear-gradient(90deg, transparent, #ff3b47, transparent) 1;
+}
+
+/* Premium primary button */
+.btn-primary {
+  position: relative;
+  background: linear-gradient(180deg, #3b6bff, #1e46e0);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.25) inset,
+    0 10px 30px -8px rgba(43, 91, 255, 0.6);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease, filter 0.18s ease;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.3) inset,
+    0 16px 40px -8px rgba(43, 91, 255, 0.75);
+}
+.btn-primary:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.btn-gold {
+  position: relative;
+  background: linear-gradient(180deg, #ffd97a, #e9af1f);
+  color: #2c2200;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 10px 30px -10px rgba(246, 198, 72, 0.6);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), filter 0.18s ease;
+}
+.btn-gold:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+.btn-gold:active {
+  transform: translateY(0) scale(0.985);
+}
+
+/* Shimmer sweep overlay (for premium chips / winning rows) */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 75%
+  );
+  background-size: 220% 100%;
+  animation: var(--animate-shimmer);
+  pointer-events: none;
+}
+
+/* Live pulse dot */
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 9999px;
+  background: #ff3b47;
+  box-shadow: 0 0 0 0 rgba(255, 59, 71, 0.7);
+  animation: live-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* ===================================================================
+   KEYFRAMES
+   =================================================================== */
+@keyframes ticker {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 10px rgba(255, 59, 71, 0.8)); }
+  50% { opacity: 0.5; filter: drop-shadow(0 0 2px rgba(255, 59, 71, 0.3)); }
+}
+
+@keyframes shimmer {
+  0% { background-position: 220% 0; }
+  100% { background-position: -120% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes gradient-pan {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes aurora {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(6%, -4%) scale(1.08); }
+  66% { transform: translate(-5%, 5%) scale(1.04); }
+}
+
+@keyframes rise {
+  0% { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes live-ping {
+  0% { box-shadow: 0 0 0 0 rgba(255, 59, 71, 0.6); }
+  70% { box-shadow: 0 0 0 7px rgba(255, 59, 71, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 59, 71, 0); }
+}
+
+/* Scanline HUD effect (kept, softened) */
+@keyframes scanline {
+  0% { transform: translateY(-100%); opacity: 0; }
+  50% { opacity: 0.05; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+.scanline-effect::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(125, 164, 255, 0.5), transparent);
+  animation: scanline 9s linear infinite;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ===================================================================
+   SCROLLBAR
+   =================================================================== */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(125, 164, 255, 0.35), rgba(125, 164, 255, 0.15));
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(125, 164, 255, 0.6), rgba(125, 164, 255, 0.3));
+  background-clip: padding-box;
+}
+
+/* Range slider accent */
+input[type="range"] {
+  accent-color: #7da4ff;
+}
+
+::selection {
+  background: rgba(43, 91, 255, 0.45);
+  color: #fff;
+}
+
+/* ===================================================================
+   TYPOGRAPHY ROLES (from DESIGN.md)
+   =================================================================== */
+.font-display-hero {
+  font-family: var(--font-anybody);
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+.font-headline-lg {
+  font-family: var(--font-anybody);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.font-headline-lg-mobile {
+  font-family: var(--font-anybody);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.font-score-display {
+  font-family: var(--font-anybody);
+  font-size: 56px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.font-body-lg {
+  font-family: var(--font-hanken);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+.font-body-md {
+  font-family: var(--font-hanken);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.font-data-mono {
+  font-family: var(--font-jetbrains);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.font-label-caps {
+  font-family: var(--font-hanken);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.12em;
+}
+
+/* Tabular numbers helper for any counter/score */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ===================================================================
+   MOTION SAFETY
+   =================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .app-backdrop::before { animation: none; }
+}

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Stadium Live - Classement Live</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Anybody:ital,wght@0,100..900;1,100..900&amp;family=Hanken+Grotesk:ital,wght@0,100..900;1,100..900&amp;family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#b5c7ea",
+                        "error": "#ffb4ab",
+                        "tertiary-fixed-dim": "#e9c400",
+                        "surface-container-lowest": "#0c0f0f",
+                        "secondary": "#b6c4ff",
+                        "secondary-fixed": "#dce1ff",
+                        "inverse-primary": "#4d5f7d",
+                        "on-surface": "#e2e2e2",
+                        "on-secondary-fixed": "#001551",
+                        "on-tertiary-container": "#4c3f00",
+                        "on-primary": "#1f314d",
+                        "surface-container": "#1e2020",
+                        "inverse-surface": "#e2e2e2",
+                        "on-secondary-fixed-variant": "#0039b3",
+                        "primary-fixed": "#d6e3ff",
+                        "surface-container-low": "#1a1c1c",
+                        "on-error-container": "#ffdad6",
+                        "on-tertiary": "#3a3000",
+                        "on-primary-fixed": "#071c36",
+                        "tertiary-container": "#c9a900",
+                        "background": "#121414",
+                        "surface-variant": "#333535",
+                        "tertiary-fixed": "#ffe16d",
+                        "outline": "#8e9098",
+                        "on-tertiary-fixed": "#221b00",
+                        "on-tertiary-fixed-variant": "#544600",
+                        "surface-bright": "#37393a",
+                        "surface-tint": "#b5c7ea",
+                        "inverse-on-surface": "#2f3131",
+                        "error-container": "#93000a",
+                        "on-surface-variant": "#c4c6ce",
+                        "on-background": "#e2e2e2",
+                        "on-primary-container": "#7587a7",
+                        "on-secondary": "#002780",
+                        "tertiary": "#e9c400",
+                        "on-error": "#690005",
+                        "surface-container-highest": "#333535",
+                        "secondary-fixed-dim": "#b6c4ff",
+                        "surface-dim": "#121414",
+                        "on-secondary-container": "#e4e7ff",
+                        "surface": "#121414",
+                        "primary-fixed-dim": "#b5c7ea",
+                        "on-primary-fixed-variant": "#364764",
+                        "secondary-container": "#0356ff",
+                        "outline-variant": "#44474d",
+                        "primary-container": "#0b1f3a",
+                        "surface-container-high": "#282a2b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "24px",
+                        "margin-mobile": "16px",
+                        "container-max": "1440px",
+                        "margin-desktop": "64px",
+                        "unit": "8px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Anybody"],
+                        "body-md": ["Hanken Grotesk"],
+                        "score-display": ["Anybody"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "display-hero": ["Anybody"],
+                        "headline-lg": ["Anybody"],
+                        "label-caps": ["Hanken Grotesk"],
+                        "data-mono": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["32px", { "lineHeight": "1.2", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "score-display": ["56px", { "lineHeight": "1", "letterSpacing": "0.02em", "fontWeight": "900" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "display-hero": ["72px", { "lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "800" }],
+                        "headline-lg": ["40px", { "lineHeight": "1.2", "fontWeight": "700" }],
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "700" }],
+                        "data-mono": ["14px", { "lineHeight": "1.4", "letterSpacing": "0.05em", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .glass-panel {
+            background-color: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .neon-glow-primary { box-shadow: 0 0 15px rgba(0, 85, 255, 0.3); }
+        .neon-glow-tertiary { box-shadow: 0 0 20px rgba(233, 196, 0, 0.4); }
+        
+        /* Hide scrollbar for clean UI */
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface antialiased min-h-screen overflow-x-hidden flex flex-col">
+<!-- TopAppBar -->
+<header class="fixed docked full-width top-0 w-full flex justify-between items-center px-margin-mobile md:px-margin-desktop py-unit max-w-container-max mx-auto z-50 bg-surface/5 dark:bg-surface/5 backdrop-blur-xl border-b border-white/10 flat no shadows">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary neon-glow-primary">
+<img alt="Current user avatar, glowing portrait" class="w-full h-full object-cover" data-alt="A close up portrait of a futuristic gamer avatar in a high-tech studio. The subject is illuminated by cool blue and crisp white neon lights that create a cinematic glassmorphism aesthetic. The background is a deep, layered midnight black environment filled with soft, out-of-focus digital displays. The mood is intense, competitive, and highly elite." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDvUKkBNJEpaf6QNqXgnVjZf1e4aM7H_P6q-JbQWha-mS0xXa2ECCckR0vu1Ox4yRCbuTFKh0Jx6KKfG2l6hqGtSo-wqBTqg_Rnx0R5vcHA-SuC5kAariGWycCZeCpiszQ99HkakD0AnKtI3VxPRknLb82kzFoGN8pypv-W-w_f7LLVd78fkIfmZ_mEodkqHoKQ-e0hVCRjyfhFO2dBFSCHp1g-w9w0fyUndBp4A70Pmnldxg64-XGxjGWjkQjkz8caNWFUBRmmaI"/>
+</div>
+<div class="hidden md:block font-data-mono text-data-mono text-on-surface-variant">Rank #42</div>
+</div>
+<div class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg italic uppercase tracking-tighter text-primary">STADIUM LIVE</div>
+<div class="font-data-mono text-data-mono text-primary flex items-center gap-1 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
+<span class="material-symbols-outlined text-[18px]">monetization_on</span>
+            1,250 TC
+        </div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-grow pt-[80px] pb-[160px] md:pb-[100px] w-full max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mt-6 mb-10 gap-4">
+<div>
+<div class="flex items-center gap-3 mb-1">
+<div class="flex items-center gap-2 bg-surface-container-high px-2.5 py-1 rounded-full border border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+<div class="w-2 h-2 rounded-full bg-[#E53935] animate-pulse shadow-[0_0_8px_#E53935]"></div>
+<span class="font-label-caps text-label-caps text-on-surface tracking-widest">LIVE</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">LES TOILES NOIRES PREDICTOR</span>
+</div>
+<h1 class="font-headline-lg-mobile md:font-display-hero text-headline-lg-mobile md:text-display-hero italic uppercase tracking-tighter text-on-surface drop-shadow-lg">Classement Live</h1>
+</div>
+<div class="glass-panel px-4 py-2 rounded-xl flex items-center gap-4">
+<div class="text-center">
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-1">TIME REMAINING</div>
+<div class="font-data-mono text-data-mono text-primary">02:14:59</div>
+</div>
+<div class="w-px h-8 bg-white/10"></div>
+<div class="text-center">
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-1">TOTAL PLAYERS</div>
+<div class="font-data-mono text-data-mono text-on-surface">12,408</div>
+</div>
+</div>
+</div>
+<!-- Podium Section (Top 3) -->
+<div class="flex justify-center items-end gap-2 md:gap-6 mb-12 h-[220px] md:h-[280px]">
+<!-- Rank 2 (Silver) -->
+<div class="flex flex-col items-center w-[30%] md:w-48 transform translate-y-4">
+<div class="relative mb-3">
+<div class="absolute -top-3 -right-2 bg-surface-container z-10 w-6 h-6 md:w-8 md:h-8 rounded-full border border-white/10 flex items-center justify-center font-data-mono text-[12px] md:text-data-mono text-on-surface shadow-lg">2</div>
+<div class="w-16 h-16 md:w-24 md:h-24 rounded-full overflow-hidden border-[3px] border-[#C0C0C0] shadow-[0_0_15px_rgba(192,192,192,0.3)]">
+<img alt="Silver rank player avatar" class="w-full h-full object-cover" data-alt="A portrait of a male competitor with a determined expression, bathed in cool, metallic silver lighting. The background is a dark, cinematic blur typical of a high-end esports broadcasting studio. Subtle glassmorphism framing and deep shadows emphasize the elite, competitive mood of the scene." src="https://lh3.googleusercontent.com/aida-public/AB6AXuALHFjSpXyPxCdhHKsKsZYq2pF1cyXq_ss-2gNviHXZA-X2g9Er-4NUQqfZtR7XfyDLRtYBLs2PcE7aRJ3JJTqVFTLCGr7TnQF-J7wDqOi2bvtTIDit0WQhVdo7j_T-gkb9C_VDTa0xETJRiCKT6U-A3hJOSxAA8JxhN4VGDSy7Nhno8fy17cTGUVBySVCeQgDxQ3rb-A8Mxj70GjcsrDrH7XGCO4eQUzkduf0NLHdqqo4t9HcZEKhDuPfg6QYIypuzA4SYaJHR9DA"/>
+</div>
+</div>
+<div class="glass-panel w-full rounded-t-xl pt-4 pb-2 px-2 flex flex-col items-center h-24 md:h-32 border-b-0 relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-full h-[2px] bg-[#C0C0C0]"></div>
+<div class="font-body-md text-body-md text-on-surface font-bold truncate w-full text-center mb-1">AlexPro99</div>
+<div class="font-data-mono text-data-mono text-primary bg-primary/10 px-2 py-0.5 rounded text-[12px] md:text-[14px]">8,450 TC</div>
+</div>
+</div>
+<!-- Rank 1 (Gold) -->
+<div class="flex flex-col items-center w-[35%] md:w-56 z-10">
+<div class="relative mb-4">
+<div class="absolute -top-6 left-1/2 transform -translate-x-1/2 text-tertiary">
+<span class="material-symbols-outlined text-4xl drop-shadow-[0_0_10px_rgba(233,196,0,0.8)]" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+</div>
+<div class="w-20 h-20 md:w-32 md:h-32 rounded-full overflow-hidden border-[4px] border-tertiary neon-glow-tertiary">
+<img alt="Gold rank player avatar" class="w-full h-full object-cover" data-alt="A triumphant portrait of a female champion illuminated by bright, warm gold and stark white neon lights. She is situated in a premium, high-tech digital environment with dark midnight layers and frosted glass partitions behind her. The atmosphere is victorious, prestigious, and visually intense." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8cJVwjXXnxSzE45bjrX5wu02wWhCIQC4kVmA8F-n43RCyytFEiQL7JeyqwuL5E6B-pDT-8Fp6bqiuMUpUHUWaTrLvjbShML9u0Bb4hygTUzRRYuIDgBmgi27O8IY4RedTwAhk1YF4hULn4d4wR_2BkzKkYujcRu3ywwecpskzSuzfRykKAv_t4BIRsEmEGKYilLw7Kf7w_jwTgmjfcZ02_BGufRSyiEkmNBUc2eNW2c_QOR5UjiBWJD1mF5_cYJtUjYxck6vki6s"/>
+</div>
+</div>
+<div class="glass-panel w-full rounded-t-xl pt-6 pb-4 px-2 flex flex-col items-center h-32 md:h-40 border-b-0 relative overflow-hidden bg-gradient-to-t from-tertiary/5 to-transparent">
+<div class="absolute top-0 left-0 w-full h-[3px] bg-tertiary shadow-[0_0_10px_rgba(233,196,0,0.8)]"></div>
+<div class="font-headline-lg-mobile md:font-headline-lg text-[20px] md:text-[24px] italic text-tertiary truncate w-full text-center mb-1">ToileMaster</div>
+<div class="font-data-mono text-data-mono text-on-surface bg-surface-container-high border border-white/10 px-3 py-1 rounded text-[14px] md:text-[16px] shadow-inner">9,200 TC</div>
+</div>
+</div>
+<!-- Rank 3 (Bronze) -->
+<div class="flex flex-col items-center w-[30%] md:w-48 transform translate-y-8">
+<div class="relative mb-3">
+<div class="absolute -top-3 -right-2 bg-surface-container z-10 w-6 h-6 md:w-8 md:h-8 rounded-full border border-white/10 flex items-center justify-center font-data-mono text-[12px] md:text-data-mono text-on-surface shadow-lg">3</div>
+<div class="w-16 h-16 md:w-24 md:h-24 rounded-full overflow-hidden border-[3px] border-[#CD7F32] shadow-[0_0_15px_rgba(205,127,50,0.3)]">
+<img alt="Bronze rank player avatar" class="w-full h-full object-cover" data-alt="A focused portrait of a young competitor bathed in warm bronze and copper neon lighting. The setting is a sophisticated dark-mode gaming dashboard environment with subtle glass layers and deep blue shadows. The visual style is crisp, modern, and cinematic, emphasizing intense concentration." src="https://lh3.googleusercontent.com/aida-public/AB6AXuChAT4XNS2qkWIeTsN0WCMYF_R6Ps_tUlj01F5DUk6eGlpi7O24b2onin1gKHpuxHs-5nHj9y5rHP7WR_iSDFDQvTMGpc1gOiZpbi2SW_SGP8pB8pB5gmH_jOLKdNH_G-9LFlh_gwpoTA1TWXe0Af6-tOMccL-t75x1kW14xeFtBBQMc3NwOXGhYzhO22EyBX1dxnZF8oEDBMct-4vhrPkBokhvjeHhSD5CjQiUFvCzNOV4_TNxEbmxnikplCh4ENYcGt2ipOhcURs"/>
+</div>
+</div>
+<div class="glass-panel w-full rounded-t-xl pt-4 pb-2 px-2 flex flex-col items-center h-20 md:h-28 border-b-0 relative overflow-hidden">
+<div class="absolute top-0 left-0 w-full h-[2px] bg-[#CD7F32]"></div>
+<div class="font-body-md text-body-md text-on-surface font-bold truncate w-full text-center mb-1">ShadowBet</div>
+<div class="font-data-mono text-data-mono text-primary bg-primary/10 px-2 py-0.5 rounded text-[12px] md:text-[14px]">7,950 TC</div>
+</div>
+</div>
+</div>
+<!-- Leaderboard List -->
+<div class="glass-panel rounded-2xl overflow-hidden flex flex-col mb-8">
+<!-- Header Row -->
+<div class="grid grid-cols-[40px_1fr_80px_40px] md:grid-cols-[60px_1fr_120px_60px] gap-2 items-center px-4 py-3 border-b border-white/10 bg-surface-container/50">
+<div class="font-label-caps text-label-caps text-on-surface-variant text-center">POS</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant pl-2">PLAYER</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant text-right">SCORE</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant text-center">CHG</div>
+</div>
+<!-- List Items (Simulated 4 to 10) -->
+<div class="flex flex-col">
+<!-- Row 4 -->
+<div class="grid grid-cols-[40px_1fr_80px_40px] md:grid-cols-[60px_1fr_120px_60px] gap-2 items-center px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors group">
+<div class="font-data-mono text-data-mono text-on-surface-variant text-center">4</div>
+<div class="flex items-center gap-3 overflow-hidden">
+<div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-surface-container overflow-hidden shrink-0"><img alt="Avatar" class="w-full h-full object-cover" data-alt="A generic male gaming avatar headshot with cool blue rim lighting against a pitch black background. Minimalist glassmorphism style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDgbMNDZYvJQ8ypsvEbdN-3uF-CYrkYw56RPWuvPWSyyiMFEnUz7EZHEM6k-z0GFY05MkaCkvu59AFZX1t3pOTxfVxLVf_k1eF3TcubL18ZDzcV59IYJvYKg17REYSDR7ooBvSWPZ7XOP7gXJmk_pZpMgwNwp02uaSCignICeaBeFGGHKWxcZxPUiLBNovoebR-LcqvE6bW-3QPKDS_4TA_Kgs6nkzuklIHVfsehjmOQGVb6119LW2Pric0U7dbs2L4fZreeVqv8VU"/></div>
+<div class="font-body-md text-body-md text-on-surface truncate group-hover:text-primary transition-colors">BetSniper</div>
+</div>
+<div class="font-data-mono text-data-mono text-primary text-right">7,820</div>
+<div class="flex justify-center"><span class="material-symbols-outlined text-[16px] text-primary">arrow_upward</span></div>
+</div>
+<!-- Row 5 -->
+<div class="grid grid-cols-[40px_1fr_80px_40px] md:grid-cols-[60px_1fr_120px_60px] gap-2 items-center px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors group">
+<div class="font-data-mono text-data-mono text-on-surface-variant text-center">5</div>
+<div class="flex items-center gap-3 overflow-hidden">
+<div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-surface-container overflow-hidden shrink-0"><img alt="Avatar" class="w-full h-full object-cover" data-alt="A generic female gaming avatar headshot with cool blue rim lighting against a pitch black background. Minimalist glassmorphism style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUuZYeyO1rXuXdkR-OxC93vB8Z95YlBsgByWpOVeGpAckWlNxo1COpQevzMu1kdHFfekigUagjXcbwwLRnwwo92-7KD2RNJEACPgpRr941d-jKhiPhrjqxPG4U1fEyNE3Ai-PVBbIF91lqg9z-svDn7zKOIgMhr1RIsE_7IdpvdzrmbMA61byYKW7WP6SwUBwj1SGBLSA-I8YvKK7_xyCXHjiQwyu1g_bHDYPaCqgEbPs__rcF7MU9q2Z84PQlF9VoVzLkCg_Lndw"/></div>
+<div class="font-body-md text-body-md text-on-surface truncate group-hover:text-primary transition-colors">LunaStat</div>
+</div>
+<div class="font-data-mono text-data-mono text-primary text-right">7,650</div>
+<div class="flex justify-center"><span class="material-symbols-outlined text-[16px] text-error">arrow_downward</span></div>
+</div>
+<!-- Row 6 -->
+<div class="grid grid-cols-[40px_1fr_80px_40px] md:grid-cols-[60px_1fr_120px_60px] gap-2 items-center px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors group">
+<div class="font-data-mono text-data-mono text-on-surface-variant text-center">6</div>
+<div class="flex items-center gap-3 overflow-hidden">
+<div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-surface-container overflow-hidden shrink-0"><img alt="Avatar" class="w-full h-full object-cover" data-alt="A generic male gaming avatar headshot with cool blue rim lighting against a pitch black background. Minimalist glassmorphism style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKwDdb0OYUMYQP-h8GlQrQmVTEMAvn1ZEzmnXmOh1JYuFzeMMvXq1mId5hryhht6sn3zIMM1RGVGEjTAAzkz2ORxwjSSeMBJ3ZMgqmvQMihyRO3fQs3j2G_Ae1WPVC_dkwVlxAqTmaiCrGyIwG-6ua3ilxi8izPcdGBfcKFS2_4052ZrI0jEmZfHewNoYaaeXAdopVA19-eV2JUn1xn_8jd8ffSHCTAay3I1m3saLEXiaa9Pk5JeB4WAWV2uMnFHma4Y7-a9cACHQ"/></div>
+<div class="font-body-md text-body-md text-on-surface truncate group-hover:text-primary transition-colors">NeoPredict</div>
+</div>
+<div class="font-data-mono text-data-mono text-primary text-right">7,400</div>
+<div class="flex justify-center"><span class="material-symbols-outlined text-[16px] text-on-surface-variant">horizontal_rule</span></div>
+</div>
+<!-- Omitted middle rows for brevity, representing the rest of Top 20 -->
+<div class="py-4 flex justify-center items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-white/20"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-white/20"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-white/20"></div>
+</div>
+</div>
+</div>
+</main>
+<!-- Sticky Current Player Bar -->
+<div class="fixed bottom-[80px] md:bottom-6 left-0 w-full px-margin-mobile md:px-margin-desktop z-40">
+<div class="max-w-container-max mx-auto glass-panel bg-primary/10 border-primary/30 rounded-xl px-4 py-3 flex items-center justify-between shadow-[0_-5px_20px_rgba(0,85,255,0.15)] backdrop-blur-2xl">
+<div class="flex items-center gap-4">
+<div class="font-headline-lg-mobile text-[24px] text-primary italic">42</div>
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-primary"><img alt="Current User" class="w-full h-full object-cover" data-alt="The current user's profile image, same as top nav." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAYSLseCnjH5S9LGeq4y5AHhKlkAUJ7Cowuc-CNWdx4hZ-StQ-Uv3Q04T8Izdmw2u8x-ydH7HFeg1sKDbl_wTmRCm3MxiQ6yXcoULelI8wPxSLxTIY9ih5bRj2vkPgcyl6sKQJG_QLPMIjLaRnjXrndwnXSCG9QFOlt4NnBt9jycMNQKee3ajrUbbm0MYf64cD9V-PiQEhNEQHYU4cOFAbKG27Vq1A6l7YLuZqvXlnOllNOpzCEbIXPPw8nYN7SCMn_j4WKRoQS7WA"/></div>
+<div class="hidden md:block font-body-md text-body-md text-on-surface font-bold">You</div>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="text-right">
+<div class="font-label-caps text-label-caps text-primary/70 mb-0.5">YOUR SCORE</div>
+<div class="font-data-mono text-data-mono text-primary font-bold">1,250 TC</div>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface/50 border border-white/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">arrow_upward</span>
+</div>
+</div>
+</div>
+</div>
+<!-- BottomNavBar (Mobile Primary, Hidden on md per responsive rules) -->
+<nav class="fixed full-width bottom-0 z-50 w-full flex justify-around items-center px-4 pb-6 pt-2 bg-surface/5 dark:bg-surface/5 backdrop-blur-xl border-t border-white/10 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] md:hidden">
+<!-- BETS -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant/60 dark:text-on-surface-variant/60 hover:bg-white/5 w-20 py-2 rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">sports_soccer</span>
+<span class="font-label-caps text-label-caps">BETS</span>
+</a>
+<!-- RANKING (Active State) -->
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary drop-shadow-[0_0_10px_rgba(182,196,255,0.4)] scale-110 duration-200 ease-out w-20 py-2 rounded-xl" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">leaderboard</span>
+<span class="font-label-caps text-label-caps">RANKING</span>
+<div class="absolute -bottom-2 w-1 h-1 rounded-full bg-secondary shadow-[0_0_8px_rgba(182,196,255,1)]"></div>
+</a>
+<!-- PROFILE -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant/60 dark:text-on-surface-variant/60 hover:bg-white/5 w-20 py-2 rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">person</span>
+<span class="font-label-caps text-label-caps">PROFILE</span>
+</a>
+</nav>
+</body></html>

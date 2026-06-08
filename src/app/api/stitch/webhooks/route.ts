@@ -1,13 +1,22 @@
 import { NextResponse } from 'next/server';
-
-// Simulation de persistance locale en mémoire
-const registeredWebhooks: { id: string; url: string; events: string[]; created_at: string }[] = [];
+import db from '@/lib/db';
 
 export async function GET() {
-  return NextResponse.json({
-    success: true,
-    webhooks: registeredWebhooks
-  });
+  try {
+    const rows = db.prepare('SELECT * FROM webhooks ORDER BY created_at DESC').all() as { id: string; url: string; events: string; created_at: string }[];
+    const webhooks = rows.map(r => ({
+      id: r.id,
+      url: r.url,
+      events: r.events ? r.events.split(',') : [],
+      created_at: r.created_at
+    }));
+    return NextResponse.json({
+      success: true,
+      webhooks
+    });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: 'Impossible de lire les webhooks.' }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -26,7 +35,8 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString()
     };
 
-    registeredWebhooks.push(newWebhook);
+    db.prepare('INSERT INTO webhooks (id, url, events, created_at) VALUES (?, ?, ?, ?)')
+      .run(newWebhook.id, newWebhook.url, newWebhook.events.join(','), newWebhook.created_at);
 
     return NextResponse.json({
       success: true,
@@ -34,7 +44,7 @@ export async function POST(request: Request) {
       webhook: newWebhook
     });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Format JSON invalide.' }, { status: 400 });
+    return NextResponse.json({ success: false, error: 'Format JSON invalide ou erreur de base de données.' }, { status: 400 });
   }
 }
 

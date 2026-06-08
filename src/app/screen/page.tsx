@@ -6,14 +6,7 @@ import QRCode from 'qrcode';
 import { motion as motionClient, AnimatePresence } from 'framer-motion';
 import GameEventOverlay from '@/components/GameEventOverlay';
 
-const AVATARS: Record<string, { emoji: string; color: string }> = {
-  avatar_1: { emoji: '🐓', color: 'bg-gradient-to-br from-[#2b5bff] to-[#0a1b3d]' },
-  avatar_2: { emoji: '🦁', color: 'bg-gradient-to-br from-[#f6c648] to-[#5a4400]' },
-  avatar_3: { emoji: '⚡', color: 'bg-gradient-to-br from-[#9db4ff] to-[#2b5bff]' },
-  avatar_4: { emoji: '🏆', color: 'bg-gradient-to-br from-[#ffd97a] to-[#c79b1e]' },
-  avatar_5: { emoji: '⚽', color: 'bg-gradient-to-br from-[#7da4ff] to-[#16284f]' },
-  avatar_6: { emoji: '🔥', color: 'bg-gradient-to-br from-[#ff8a87] to-[#8c0009]' },
-};
+import { getAvatarConfig } from '@/lib/avatars';
 
 const SLIDE_COUNT = 5;
 
@@ -22,6 +15,22 @@ export default function ScreenPage() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [qrUrl, setQrUrl] = useState('');
 
+  const [tickerEvents, setTickerEvents] = useState<any[]>([]);
+
+  // Periodically advance the live match simulation
+  useEffect(() => {
+    if (match.status !== 'live') return;
+    const syncInterval = setInterval(async () => {
+      try {
+        await fetch('/api/admin/sync');
+      } catch (e) {
+        console.error('[Sync Poll] error:', e);
+      }
+    }, 15000);
+    return () => clearInterval(syncInterval);
+  }, [match.status]);
+
+  // Cycle slide view every 15s
   useEffect(() => {
     const slideInterval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % SLIDE_COUNT);
@@ -29,11 +38,22 @@ export default function ScreenPage() {
     return () => clearInterval(slideInterval);
   }, []);
 
+  // Fetch real game events for the news ticker
   useEffect(() => {
-    if (match.status !== 'live') return;
-    const simInterval = setInterval(() => runSimulationStep(), 8000);
-    return () => clearInterval(simInterval);
-  }, [match.status, runSimulationStep]);
+    const fetchTicker = async () => {
+      try {
+        const res = await fetch('/api/db?op=ticker').then(r => r.json());
+        if (res.events) {
+          setTickerEvents(res.events);
+        }
+      } catch (err) {
+        console.error('Ticker fetch error', err);
+      }
+    };
+    fetchTicker();
+    const interval = setInterval(fetchTicker, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -52,7 +72,7 @@ export default function ScreenPage() {
   allPlayers.sort((a, b) => (b.toilesCoins + b.totalWinnings) - (a.toilesCoins + a.totalWinnings));
   const top10 = allPlayers.slice(0, 10);
 
-  const getAvatarConfig = (avatarKey: string) => AVATARS[avatarKey] || { emoji: '👤', color: 'bg-white/10' };
+
 
   const slideTransition = {
     initial: { opacity: 0, x: 50 },
@@ -178,10 +198,12 @@ export default function ScreenPage() {
                           <span className={`font-score-display text-[24px] w-9 text-center tabular ${isPodium ? 'text-tertiary' : 'text-on-surface-variant/50'}`}>
                             {idx + 1}
                           </span>
-                          <div className={`w-11 h-11 rounded-full flex items-center justify-center text-xl shrink-0 border border-white/10 ${avatar.color}`}>
+                          <div className={`w-11 h-11 rounded-full flex items-center justify-center text-xl shrink-0 border border-white/10 bg-gradient-to-br ${avatar.color}`}>
                             {avatar.emoji}
                           </div>
-                          <span className="font-body-md font-bold truncate flex-grow text-white">{player.username}</span>
+                          <span className="font-body-md font-bold truncate flex-grow text-white">
+                            {player.username} {player.badgeCount ? ` 🏅${player.badgeCount}` : ''}
+                          </span>
                           <span className={`font-data-mono text-[16px] font-bold tabular ${isPodium ? 'text-tertiary' : 'text-primary'}`}>
                             {(player.toilesCoins + player.totalWinnings).toLocaleString()} TC
                           </span>
@@ -295,24 +317,35 @@ export default function ScreenPage() {
             <div className="absolute whitespace-nowrap animate-ticker flex items-center">
               {[0, 1].map((rep) => (
                 <span key={rep} className="flex items-center gap-20 px-10">
-                  <span className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-tertiary text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>monetization_on</span>
-                    <span className="font-data-mono text-[18px] text-on-surface">
-                      <span className="font-bold text-tertiary">ESTEBAN</span> VIENT DE GAGNER <span className="text-white bg-white/10 px-2 py-0.5 rounded">250 TC</span> SUR RÉSULTAT FINAL
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-error text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_fire_department</span>
-                    <span className="font-data-mono text-[18px] text-on-surface">
-                      <span className="font-bold text-error">MARIE</span> A DÉBLOQUÉ LE BADGE <span className="text-white bg-white/10 px-2 py-0.5 rounded">ORACLE BLEU</span>
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-secondary text-[24px]">check_circle</span>
-                    <span className="font-data-mono text-[18px] text-on-surface">
-                      <span className="font-bold text-secondary">LUCAS</span> PRÉDICTION PARFAITE SUR SCORE EXACT 1-0 (+450 TC)
-                    </span>
-                  </span>
+                  {tickerEvents.length > 0 ? (
+                    tickerEvents.map((evt) => {
+                      const icon = evt.type === 'goal' ? 'sports_soccer' : evt.type === 'badge' ? 'military_tech' : 'info';
+                      const color = evt.type === 'goal' ? 'text-primary' : evt.type === 'badge' ? 'text-error' : 'text-secondary';
+                      return (
+                        <span key={evt.id + '-' + rep} className="flex items-center gap-3">
+                          <span className={`material-symbols-outlined ${color} text-[24px]`} style={{ fontVariationSettings: "'FILL' 1" }}>{icon}</span>
+                          <span className="font-data-mono text-[18px] text-on-surface">
+                            <span className={`font-bold ${color}`}>{evt.title}</span> {evt.subtitle}
+                          </span>
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-tertiary text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>monetization_on</span>
+                        <span className="font-data-mono text-[18px] text-on-surface">
+                          REJOIGNEZ LA PARTIE EN SCANNANT LE QR CODE ! RECEVEZ 1 000 TOILESCOINS GRATUITS.
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-primary text-[24px]">sports_soccer</span>
+                        <span className="font-data-mono text-[18px] text-on-surface">
+                          PRÉDISEZ LE SCORE DU MATCH ET GAGNEZ DES PINTES GRATUITES AU BAR !
+                        </span>
+                      </span>
+                    </>
+                  )}
                 </span>
               ))}
             </div>

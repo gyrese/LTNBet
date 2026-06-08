@@ -23,7 +23,8 @@ db.exec(`
     possession_home INTEGER DEFAULT 50,
     shots_on_target_home INTEGER DEFAULT 0,
     corners_home INTEGER DEFAULT 0,
-    cards_home INTEGER DEFAULT 0
+    cards_home INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS markets (
@@ -92,13 +93,84 @@ db.exec(`
     match_id TEXT PRIMARY KEY,
     double_gains_active INTEGER DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS webhooks (
+    id TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    events TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS badges (
+    code TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    icon TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS player_badges (
+    player_id TEXT NOT NULL,
+    badge_code TEXT NOT NULL,
+    earned_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (player_id, badge_code),
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+    FOREIGN KEY (badge_code) REFERENCES badges(code) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS missions (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    reward_coins INTEGER DEFAULT 0,
+    reward_badge_code TEXT,
+    type TEXT NOT NULL,
+    target INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS player_missions (
+    player_id TEXT NOT NULL,
+    mission_id TEXT NOT NULL,
+    progress INTEGER DEFAULT 0,
+    is_completed INTEGER DEFAULT 0,
+    PRIMARY KEY (player_id, mission_id),
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+    FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS rewards (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    cost_toiles_coins INTEGER DEFAULT 0,
+    image TEXT DEFAULT '🎁'
+  );
+
+  CREATE TABLE IF NOT EXISTS reward_ledger (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    reward_id TEXT NOT NULL,
+    reward_title TEXT NOT NULL,
+    assigned_by TEXT DEFAULT 'admin',
+    status TEXT DEFAULT 'pending',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES players(id) ON DELETE CASCADE,
+    FOREIGN KEY (reward_id) REFERENCES rewards(id) ON DELETE CASCADE
+  );
 `);
+
+// Alter table migrations to add is_active column on existing DB databases safely
+try {
+  db.exec('ALTER TABLE matches ADD COLUMN is_active INTEGER DEFAULT 0;');
+} catch (e) {
+  // Column already exists, ignore
+}
 
 // Seed initial data if empty
 const matchExists = db.prepare('SELECT id FROM matches WHERE id = ?').get('a0000000-0000-0000-0000-000000000001');
 if (!matchExists) {
   const now = Date.now();
-  db.prepare(`INSERT INTO matches VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+  db.prepare(`INSERT INTO matches (id, home_team, away_team, home_score, away_score, status, starts_at, bets_closed_at, elapsed_time, possession_home, shots_on_target_home, corners_home, cards_home, is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)`).run(
     'a0000000-0000-0000-0000-000000000001',
     'France', 'Angleterre', 1, 0, 'live',
     new Date(now - 65 * 60 * 1000).toISOString(),
@@ -153,6 +225,36 @@ if (!matchExists) {
   for (const p of bots) insP.run(...p);
 
   db.prepare(`INSERT INTO game_settings VALUES (?,0)`).run('a0000000-0000-0000-0000-000000000001');
+}
+
+// Seed badges if empty
+const badgeCount = db.prepare('SELECT COUNT(*) as count FROM badges').get() as { count: number };
+if (badgeCount.count === 0) {
+  const insBadge = db.prepare('INSERT INTO badges (code, title, description, icon) VALUES (?, ?, ?, ?)');
+  insBadge.run('nostradamus', 'Nostradamus', '5 bons paris consécutifs', 'emoji_events');
+  insBadge.run('oracle_bleu', 'Oracle Bleu', '10 bons paris au total', 'visibility');
+  insBadge.run('roi_buteurs', 'Roi des Buteurs', '5 buteurs trouvés dans le match', 'military_tech');
+  insBadge.run('visionnaire', 'Visionnaire', 'Trouver un score exact', 'workspace_premium');
+  insBadge.run('legende', 'Légende des Toiles', 'Atteindre le top 1 du classement', 'hub');
+}
+
+// Seed missions if empty
+const missionCount = db.prepare('SELECT COUNT(*) as count FROM missions').get() as { count: number };
+if (missionCount.count === 0) {
+  const insMission = db.prepare('INSERT INTO missions (id, title, description, reward_coins, reward_badge_code, type, target) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  insMission.run('m-1', 'Parier sur le match', 'Placer au moins 3 paris sur le match en direct', 250, null, 'bet_count', 3);
+  insMission.run('m-2', 'Nostradamus en Herbe', 'Trouver au moins un score exact sur le match', 500, 'visionnaire', 'exact_score', 1);
+  insMission.run('m-3', 'Prédicteur de Buteurs', 'Parier sur un buteur à tout moment', 300, null, 'buteur_count', 1);
+}
+
+// Seed rewards if empty
+const rewardCount = db.prepare('SELECT COUNT(*) as count FROM rewards').get() as { count: number };
+if (rewardCount.count === 0) {
+  const insReward = db.prepare('INSERT INTO rewards (id, title, description, cost_toiles_coins, image) VALUES (?, ?, ?, ?, ?)');
+  insReward.run('r-beer', 'Pinte offerte', 'Une pinte au choix à réclamer au comptoir.', 2500, '🍺');
+  insReward.run('r-cocktail', 'Cocktail Création', 'Le cocktail signature du barman offert.', 3500, '🍹');
+  insReward.run('r-burger', 'Burger Toiles Noires', 'Le burger classique avec frites.', 5000, '🍔');
+  insReward.run('r-cap', 'Casquette France Toiles', 'Une casquette collector aux couleurs du bar.', 4000, '🧢');
 }
 
 export default db;

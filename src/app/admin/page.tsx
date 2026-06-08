@@ -43,13 +43,59 @@ export default function AdminPage() {
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedReward, setSelectedReward] = useState('');
 
+  // States pour la recherche de match et session
+  const [searchQuery, setSearchQuery] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [sessionSuccess, setSessionSuccess] = useState('');
+
+  const handleSearchMatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSearchLoading(true);
+    try {
+      const res = await fetch(`/api/admin/matches/search?q=${encodeURIComponent(searchQuery)}`).then(r => r.json());
+      if (res.success) {
+        setSearchResults(res.results);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setSearchLoading(false);
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleCreateSession = async (match: any) => {
+    try {
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op: 'create_session', match })
+      }).then(r => r.json());
+      if (res.success) {
+        setSessionSuccess(`Session créée avec succès pour le match ${match.homeTeam} - ${match.awayTeam} !`);
+        // Refresh store
+        useGameStore.getState().initFromSupabase();
+        setTimeout(() => setSessionSuccess(''), 4000);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
-    if (!currentUser) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && !currentUser) {
       router.push('/join');
     }
-  }, [currentUser, router]);
+  }, [currentUser, router, mounted]);
 
-  if (!currentUser) return null;
+  if (!mounted || !currentUser) return null;
 
   // Gate
   if (!isUserAdmin) {
@@ -141,6 +187,68 @@ export default function AdminPage() {
 
           {/* Left */}
           <div className="lg:col-span-8 space-y-6">
+
+            {/* Search Match and Session Creation */}
+            <section className="glass-panel rounded-2xl p-6 space-y-4">
+              <h2 className={sectionHead}>
+                <span className="material-symbols-outlined text-[18px] text-tertiary">search</span>
+                RECHERCHE &amp; DÉMARRAGE DE SESSION
+              </h2>
+              
+              <form onSubmit={handleSearchMatch} className="flex gap-2">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Chercher une équipe (ex: France, Espagne...)"
+                  className={inputClass}
+                />
+                <button
+                  type="submit"
+                  disabled={searchLoading}
+                  className="bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 font-label-caps text-label-caps px-6 py-2.5 rounded-xl cursor-pointer disabled:opacity-40 transition-all"
+                >
+                  {searchLoading ? '...' : 'Chercher'}
+                </button>
+              </form>
+
+              {sessionSuccess && (
+                <div className="bg-emerald-500/12 text-emerald-300 border border-emerald-500/25 p-3 rounded-xl text-center text-sm font-data-mono">
+                  {sessionSuccess}
+                </div>
+              )}
+
+              {searchResults.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <span className="block font-label-caps text-[10px] text-on-surface-variant tracking-wider">MATCHS TROUVÉS</span>
+                  <div className="divide-y divide-white/5 bg-white/[0.02] border border-white/8 rounded-2xl overflow-hidden">
+                    {searchResults.map((m) => (
+                      <div key={m.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white/[0.02] transition-colors">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-body-md font-bold text-white">{m.homeTeam} vs {m.awayTeam}</span>
+                            <span className={`text-[10px] font-label-caps px-2 py-0.5 rounded-full border ${
+                              m.status === 'live' ? 'bg-error/12 border-error/30 text-error' : 'bg-white/5 border-white/10 text-on-surface-variant'
+                            }`}>
+                              {m.status.toUpperCase()}
+                            </span>
+                          </div>
+                          <span className="block text-[11px] font-data-mono text-on-surface-variant/70 mt-1">
+                            Début : {new Date(m.startsAt).toLocaleString('fr-FR')} {m.status === 'live' && `· Score : ${m.homeScore}-${m.awayScore}`}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleCreateSession(m)}
+                          className="bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary font-label-caps text-[11px] px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap self-start sm:self-center"
+                        >
+                          Créer Session
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
 
             {/* Match control */}
             <section className="glass-panel rounded-2xl p-6 space-y-5">

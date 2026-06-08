@@ -1,21 +1,12 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useGameStore, Player } from '@/lib/store';
 import Navigation from '@/components/Navigation';
 
-const AVATARS: Record<string, { emoji: string; color: string }> = {
-  avatar_1: { emoji: '🐓', color: 'bg-gradient-to-br from-[#2b5bff] to-[#0a1b3d]' },
-  avatar_2: { emoji: '🦁', color: 'bg-gradient-to-br from-[#f6c648] to-[#5a4400]' },
-  avatar_3: { emoji: '⚡', color: 'bg-gradient-to-br from-[#9db4ff] to-[#2b5bff]' },
-  avatar_4: { emoji: '🏆', color: 'bg-gradient-to-br from-[#ffd97a] to-[#c79b1e]' },
-  avatar_5: { emoji: '⚽', color: 'bg-gradient-to-br from-[#7da4ff] to-[#16284f]' },
-  avatar_6: { emoji: '🔥', color: 'bg-gradient-to-br from-[#ff8a87] to-[#8c0009]' },
-};
-
-const getAvatarConfig = (avatarKey: string) => AVATARS[avatarKey] || { emoji: '👤', color: 'bg-white/10' };
+import { getAvatarConfig } from '@/lib/avatars';
 
 const PODIUM_META = {
   1: { ring: 'border-tertiary', glow: 'neon-glow-tertiary', bar: 'from-tertiary/20', accent: 'text-tertiary', medal: '#f6c648', h: 'h-28 md:h-32', w: 'w-[36%] md:w-52', av: 'w-[4.5rem] h-[4.5rem] md:w-24 md:h-24', z: 'z-10', shift: '' },
@@ -43,7 +34,7 @@ function PodiumCard({ player, place }: { player: Player; place: 1 | 2 | 3 }) {
             workspace_premium
           </span>
         )}
-        <div className={`${meta.av} rounded-full flex items-center justify-center text-3xl md:text-4xl border-[3px] ${meta.ring} ${meta.glow} ${cfg.color}`}>
+        <div className={`${meta.av} rounded-full flex items-center justify-center text-3xl md:text-4xl border-[3px] ${meta.ring} ${meta.glow} bg-gradient-to-br ${cfg.color}`}>
           {cfg.emoji}
         </div>
         <span
@@ -68,17 +59,64 @@ function PodiumCard({ player, place }: { player: Player; place: 1 | 2 | 3 }) {
 
 export default function RankingPage() {
   const router = useRouter();
-  const { currentUser, leaderboard, updateLeaderboard } = useGameStore();
+  const { currentUser, match, leaderboard, updateLeaderboard } = useGameStore();
+  const [timeLeft, setTimeLeft] = useState('');
+
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!currentUser) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && !currentUser) {
       router.push('/join');
       return;
     }
-    updateLeaderboard();
-  }, [currentUser, router, updateLeaderboard]);
+    if (mounted) {
+      updateLeaderboard();
+    }
+  }, [currentUser, router, updateLeaderboard, mounted]);
 
-  if (!currentUser) return null;
+  // Periodically advance the live match simulation
+  useEffect(() => {
+    if (match.status !== 'live') return;
+    const syncInterval = setInterval(async () => {
+      try {
+        await fetch('/api/admin/sync');
+      } catch (e) {
+        console.error('[Sync Poll] error:', e);
+      }
+    }, 15000);
+    return () => clearInterval(syncInterval);
+  }, [match.status]);
+
+  // Session remaining time countdown
+  useEffect(() => {
+    const updateTimer = () => {
+      if (!match.betsClosedAt) {
+        setTimeLeft('00:00:00');
+        return;
+      }
+      const diff = new Date(match.betsClosedAt).getTime() - Date.now();
+      if (diff <= 0) {
+        setTimeLeft('00:00:00');
+        return;
+      }
+      const hours = Math.floor(diff / 3600000);
+      const minutes = Math.floor((diff % 3600000) / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      
+      const pad = (n: number) => String(n).padStart(2, '0');
+      setTimeLeft(`${pad(hours)}:${pad(minutes)}:${pad(seconds)}`);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [match.betsClosedAt]);
+
+  if (!mounted || !currentUser) return null;
 
   const allPlayers = [...leaderboard];
   const userIdx = allPlayers.findIndex((p) => p.id === currentUser.id);
@@ -122,13 +160,18 @@ export default function RankingPage() {
 
           <div className="glass-panel px-4 py-3 rounded-2xl flex items-center gap-4 text-center">
             <div>
+              <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider">TEMPS RESTANT</span>
+              <span className="font-data-mono text-primary text-[14px] md:text-[16px] font-bold tabular">{timeLeft || '02:00:00'}</span>
+            </div>
+            <div className="w-px h-9 bg-white/10" />
+            <div>
               <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider">JOUEURS</span>
-              <span className="font-data-mono text-primary text-[16px] font-bold tabular">{allPlayers.length}</span>
+              <span className="font-data-mono text-on-surface text-[14px] md:text-[16px] font-bold tabular">{allPlayers.length}</span>
             </div>
             <div className="w-px h-9 bg-white/10" />
             <div>
               <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider">RÉCOMPENSES</span>
-              <span className="font-data-mono text-tertiary text-[16px] font-bold">Top 3</span>
+              <span className="font-data-mono text-tertiary text-[14px] md:text-[16px] font-bold">Top 3</span>
             </div>
           </div>
         </div>
@@ -165,11 +208,11 @@ export default function RankingPage() {
                 >
                   <span className="font-data-mono text-on-surface-variant text-center font-bold tabular">{player.rank}</span>
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg border border-white/10 shrink-0 ${avatar.color}`}>
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg border border-white/10 shrink-0 bg-gradient-to-br ${avatar.color}`}>
                       {avatar.emoji}
                     </div>
                     <span className={`font-body-md truncate ${isMe ? 'text-primary font-bold' : 'text-on-surface group-hover:text-primary transition-colors'}`}>
-                      {player.username} {isMe && '(Vous)'}
+                      {player.username} {isMe && '(Vous)'} {player.badgeCount ? ` 🏅${player.badgeCount}` : ''}
                     </span>
                   </div>
                   <span className="font-data-mono text-primary text-right font-bold tabular">
@@ -191,10 +234,12 @@ export default function RankingPage() {
               #{currentUser.rank}
             </span>
             <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg border border-primary/50 ${getAvatarConfig(currentUser.avatar).color}`}>
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg border border-primary/50 bg-gradient-to-br ${getAvatarConfig(currentUser.avatar).color}`}>
                 {getAvatarConfig(currentUser.avatar).emoji}
               </div>
-              <span className="font-body-md text-on-surface font-bold">{currentUser.username}</span>
+              <span className="font-body-md text-on-surface font-bold">
+                {currentUser.username} {currentUser.badgeCount ? ` 🏅${currentUser.badgeCount}` : ''}
+              </span>
             </div>
           </div>
 

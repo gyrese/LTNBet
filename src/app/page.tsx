@@ -25,22 +25,19 @@ export default function HomePage() {
   const [betStatusMsg, setBetStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
-    if (!currentUser) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && !currentUser) {
       router.push('/join');
     }
-  }, [currentUser, router]);
+  }, [currentUser, router, mounted]);
 
-  // Simulateur de match toutes les 8s (simule 1 minute de match)
-  useEffect(() => {
-    if (!currentUser || match.status !== 'live') return;
-    const interval = setInterval(() => {
-      runSimulationStep();
-    }, 8000);
-    return () => clearInterval(interval);
-  }, [currentUser, match.status, runSimulationStep]);
-
-  if (!currentUser) return null;
+  if (!mounted || !currentUser) return null;
 
   const handleOutcomeClick = (market: Market, outcome: Outcome) => {
     if (market.isClosed || !market.isActive) return;

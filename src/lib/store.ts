@@ -13,6 +13,7 @@ export interface Player {
   totalBets: number;
   rank: number;
   rankChange: 'up' | 'down' | 'same';
+  badgeCount?: number;
 }
 
 export interface Match {
@@ -219,6 +220,7 @@ const playerFromDb = (r: any): Player => ({
   totalBets: r.total_bets,
   rank: r.rank ?? 99,
   rankChange: r.rank_change ?? 'same',
+  badgeCount: r.badge_count ?? 0,
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -315,20 +317,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   initFromSupabase: async () => {
     try {
-      const { match, markets, bots, settings } = await fetch('/api/db?op=state').then(r => r.json());
+      const { match, markets, bots, settings, rewards, rewardLedger } = await fetch('/api/db?op=state').then(r => r.json());
       if (match) set({ match: matchFromDb(match) });
       if (markets) set({ markets: markets.map(marketFromDb) });
       if (bots) set({ leaderboard: bots.map(playerFromDb) });
       if (settings) set({ doubleGainsActive: Boolean(settings.double_gains_active) });
+      if (rewards) set({ rewards });
+      if (rewardLedger) set({ rewardLedger });
 
       const userId = lsGet<Player | null>('ltn_user_profile', null)?.id;
       if (userId) {
-        const { player, bets } = await fetch(`/api/db?op=player&id=${userId}`).then(r => r.json());
+        const { player, bets, badges, missions } = await fetch(`/api/db?op=player&id=${userId}`).then(r => r.json());
         if (player) {
           set({ currentUser: playerFromDb(player), isUserAdmin: Boolean(player.is_admin) });
           lsSet('ltn_user_profile', playerFromDb(player));
+          if (bets) set({ myBets: bets.map(betFromDb) });
+          if (badges) set({ myBadges: badges });
+          if (missions) set({ missions });
+        } else {
+          get().logoutUser();
         }
-        if (bets) set({ myBets: bets.map(betFromDb) });
       }
     } catch (e) {
       console.error('initFromSupabase error:', e);
@@ -565,65 +573,61 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // ── Missions ───────────────────────────────────────────────────────────────
 
-  updateMissionProgress: (type: string, increment: number) => {
-    const { missions, currentUser } = get();
-    const updated = missions.map(m => {
-      if (m.type !== type || m.isCompleted) return m;
-      const newProgress = Math.min(m.target, m.progress + increment);
-      const isCompleted = newProgress >= m.target;
-      if (isCompleted && currentUser) {
-        set(s => {
-          if (!s.currentUser) return {};
-          const updatedUser = { ...s.currentUser, toilesCoins: s.currentUser.toilesCoins + m.rewardCoins };
-          lsSet('ltn_user_profile', updatedUser);
-          let updatedBadges = s.myBadges;
-          if (m.rewardBadgeCode && !updatedBadges.includes(m.rewardBadgeCode)) {
-            updatedBadges = [...updatedBadges, m.rewardBadgeCode];
-            lsSet('ltn_user_badges', updatedBadges);
-            s.triggerGameEvent({ type: 'badge', title: 'BADGE DÉBLOQUÉ ! 🏅', subtitle: `Badge "${m.rewardBadgeCode.toUpperCase()}" débloqué !` });
-          }
-          return { currentUser: updatedUser, myBadges: updatedBadges };
-        });
+  updateMissionProgress: async (type: string, increment: number) => {
+    const { currentUser } = get();
+    if (!currentUser) return;
+    try {
+      const res = await dbPost({ op: 'update_mission_progress', userId: currentUser.id, type, increment });
+      if (res.success) {
+        if (res.player) {
+          const p = playerFromDb(res.player);
+          lsSet('ltn_user_profile', p);
+          set({ currentUser: p });
+        }
+        if (res.missions) set({ missions: res.missions });
+        if (res.badges) {
+          lsSet('ltn_user_badges', res.badges);
+          set({ myBadges: res.badges });
+        }
       }
-      return { ...m, progress: newProgress, isCompleted };
-    });
-    set({ missions: updated });
+    } catch (e) {
+      console.error('updateMissionProgress error:', e);
+    }
   },
 
   // ── Rewards ────────────────────────────────────────────────────────────────
 
-  createReward: (title: string, description: string, cost: number) => {
-    set(s => ({
-      rewards: [...s.rewards, { id: 'reward-' + Date.now(), title, description, costToilesCoins: cost, image: cost > 4000 ? '🍔' : '🍺' }],
-    }));
+  createReward: async (title: string, description: string, cost: number) => {
+    try {
+      const res = await dbPost({ op: 'create_reward', title, description, cost });
+      if (res.success && res.rewards) {
+        set({ rewards: res.rewards });
+      }
+    } catch (e) {
+      console.error('createReward error:', e);
+    }
   },
 
-  attributeReward: (userId: string, rewardId: string) => {
-    const { rewards, leaderboard, currentUser } = get();
-    const reward = rewards.find(r => r.id === rewardId);
-    if (!reward) return;
-    const targetUser = currentUser?.id === userId ? currentUser : leaderboard.find(p => p.id === userId);
-    if (!targetUser) return;
-    const newLedger: RewardLedger = {
-      id: 'led-' + crypto.randomUUID().slice(0, 8),
-      userId, username: targetUser.username, rewardId,
-      rewardTitle: reward.title, assignedBy: 'Admin Les Toiles Noires',
-      status: 'pending', createdAt: new Date().toISOString(),
-    };
-    set(s => {
-      const updated = [newLedger, ...s.rewardLedger];
-      lsSet('ltn_reward_ledger', updated);
-      return { rewardLedger: updated };
-    });
-    get().triggerGameEvent({ type: 'jackpot', title: 'RÉCOMPENSE ATTRIBUÉE ! 🎁', subtitle: `${targetUser.username} remporte : ${reward.title} !` });
+  attributeReward: async (userId: string, rewardId: string) => {
+    try {
+      const res = await dbPost({ op: 'attribute_reward', userId, rewardId });
+      if (res.success && res.rewardLedger) {
+        set({ rewardLedger: res.rewardLedger });
+      }
+    } catch (e) {
+      console.error('attributeReward error:', e);
+    }
   },
 
-  claimReward: (ledgerId: string) => {
-    set(s => {
-      const updated = s.rewardLedger.map(item => item.id === ledgerId ? { ...item, status: 'claimed' as const } : item);
-      lsSet('ltn_reward_ledger', updated);
-      return { rewardLedger: updated };
-    });
+  claimReward: async (ledgerId: string) => {
+    try {
+      const res = await dbPost({ op: 'claim_reward', ledgerId });
+      if (res.success && res.rewardLedger) {
+        set({ rewardLedger: res.rewardLedger });
+      }
+    } catch (e) {
+      console.error('claimReward error:', e);
+    }
   },
 
   // ── Events ─────────────────────────────────────────────────────────────────

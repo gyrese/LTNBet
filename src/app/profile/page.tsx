@@ -11,14 +11,7 @@ function useIsClient() {
   return useSyncExternalStore(() => () => {}, () => true, () => false);
 }
 
-const AVATARS: Record<string, { emoji: string; color: string }> = {
-  avatar_1: { emoji: '🐓', color: 'bg-gradient-to-br from-[#2b5bff] to-[#0a1b3d]' },
-  avatar_2: { emoji: '🦁', color: 'bg-gradient-to-br from-[#f6c648] to-[#5a4400]' },
-  avatar_3: { emoji: '⚡', color: 'bg-gradient-to-br from-[#9db4ff] to-[#2b5bff]' },
-  avatar_4: { emoji: '🏆', color: 'bg-gradient-to-br from-[#ffd97a] to-[#c79b1e]' },
-  avatar_5: { emoji: '⚽', color: 'bg-gradient-to-br from-[#7da4ff] to-[#16284f]' },
-  avatar_6: { emoji: '🔥', color: 'bg-gradient-to-br from-[#ff8a87] to-[#8c0009]' },
-};
+import { getAvatarConfig } from '@/lib/avatars';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -45,8 +38,8 @@ export default function ProfilePage() {
 
   if (!isClient || !currentUser) return null;
 
-  const inviteUrl = `${window.location.origin}/join`;
-  const avatar = AVATARS[currentUser.avatar] || { emoji: '👤', color: 'bg-white/10' };
+  const inviteUrl = typeof window !== 'undefined' ? `${window.location.origin}/join` : '';
+  const avatar = getAvatarConfig(currentUser.avatar);
 
   const totalBetsCount = myBets.length;
   const wonBetsCount = myBets.filter((b) => b.status === 'won').length;
@@ -74,7 +67,7 @@ export default function ProfilePage() {
           <div className="absolute -right-24 -top-24 w-72 h-72 bg-secondary-container/15 rounded-full blur-3xl pointer-events-none" />
 
           <div className="relative shrink-0">
-            <div className={`w-28 h-28 rounded-3xl flex items-center justify-center text-5xl border border-white/15 relative z-10 ${avatar.color} shadow-[0_12px_30px_-8px_rgba(0,0,0,0.7)]`}>
+            <div className={`w-28 h-28 rounded-3xl flex items-center justify-center text-5xl border border-white/15 relative z-10 bg-gradient-to-br ${avatar.color} shadow-[0_12px_30px_-8px_rgba(0,0,0,0.7)]`}>
               {avatar.emoji}
             </div>
             <div className="absolute -bottom-2 -right-2 px-2.5 h-9 min-w-9 rounded-full bg-gradient-to-b from-tertiary to-tertiary-container flex items-center justify-center border-2 border-background z-20 shadow-[0_4px_14px_rgba(246,198,72,0.45)]">

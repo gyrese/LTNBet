@@ -67,8 +67,12 @@ export default function ProfilePage() {
           <div className="absolute -right-24 -top-24 w-72 h-72 bg-secondary-container/15 rounded-full blur-3xl pointer-events-none" />
 
           <div className="relative shrink-0">
-            <div className={`w-28 h-28 rounded-3xl flex items-center justify-center text-5xl border border-white/15 relative z-10 bg-gradient-to-br ${avatar.color} shadow-[0_12px_30px_-8px_rgba(0,0,0,0.7)]`}>
-              {avatar.emoji}
+            <div className={`w-28 h-28 rounded-3xl flex items-center justify-center text-5xl border border-white/15 relative z-10 bg-gradient-to-br ${avatar.color} shadow-[0_12px_30px_-8px_rgba(0,0,0,0.7)] overflow-hidden`}>
+              {avatar.imagePath ? (
+                <img src={avatar.imagePath} alt={avatar.name} className="w-full h-full object-cover" />
+              ) : (
+                avatar.emoji
+              )}
             </div>
             <div className="absolute -bottom-2 -right-2 px-2.5 h-9 min-w-9 rounded-full bg-gradient-to-b from-tertiary to-tertiary-container flex items-center justify-center border-2 border-background z-20 shadow-[0_4px_14px_rgba(246,198,72,0.45)]">
               <span className="font-headline-lg-mobile text-[15px] text-on-tertiary font-bold tabular">#{currentUser.rank}</span>

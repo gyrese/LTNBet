@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useGameStore } from '@/lib/store';
@@ -37,18 +38,21 @@ export default function JoinPage() {
 
   return (
     <div className="min-h-dvh flex flex-col justify-center items-center px-4 py-10 relative">
-      {/* Floating brand mark */}
+      {/* Logo */}
       <motion.div
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="flex items-center gap-3 mb-7"
+        className="mb-7 animate-float"
       >
-        <div className="animate-float relative w-14 h-14 rounded-2xl flex items-center justify-center bg-gradient-to-br from-secondary-container to-primary-container border border-white/15 shadow-[0_0_30px_rgba(43,91,255,0.45)]">
-          <span className="material-symbols-outlined text-white text-[30px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-            sports_soccer
-          </span>
-        </div>
+        <Image
+          src="/logoltnbet.png"
+          alt="LTNBet"
+          width={520}
+          height={208}
+          className="h-44 sm:h-52 w-auto object-contain drop-shadow-[0_0_40px_rgba(43,91,255,0.55)]"
+          priority
+        />
       </motion.div>
 
       {/* Card */}
@@ -59,11 +63,8 @@ export default function JoinPage() {
         className="glass-strong gradient-border w-full max-w-md p-7 md:p-8 rounded-3xl relative z-10"
       >
         <div className="text-center mb-7">
-          <h1 className="font-display-hero text-[40px] italic uppercase tracking-tighter bg-gradient-to-r from-white via-primary to-white bg-clip-text text-transparent leading-none">
-            Stadium Live
-          </h1>
-          <p className="font-label-caps text-[10px] text-on-surface-variant tracking-[0.25em] mt-2">
-            LES TOILES NOIRES · PREDICTOR
+          <p className="font-label-caps text-[10px] text-on-surface-variant tracking-[0.25em]">
+            PRONOSTICS · BAR LES TOILES NOIRES
           </p>
         </div>
 
@@ -123,8 +124,12 @@ export default function JoinPage() {
                         </span>
                       </span>
                     )}
-                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${avatar.color} flex items-center justify-center text-2xl shadow-inner mb-2 border border-white/10`}>
-                      {avatar.emoji}
+                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${avatar.color} flex items-center justify-center text-2xl shadow-inner mb-2 border border-white/10 overflow-hidden`}>
+                      {avatar.imagePath ? (
+                        <img src={avatar.imagePath} alt={avatar.name} className="w-full h-full object-cover" />
+                      ) : (
+                        avatar.emoji
+                      )}
                     </div>
                     <span className="font-label-caps text-[8px] text-center text-on-surface-variant truncate w-full tracking-wide">
                       {avatar.name}

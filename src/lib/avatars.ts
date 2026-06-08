@@ -3,15 +3,33 @@ export interface AvatarInfo {
   emoji: string;
   name: string;
   color: string;
+  imagePath?: string;
 }
 
 export const AVATARS: AvatarInfo[] = [
-  { id: 'avatar_1', emoji: '🐓', name: 'Le Coq Bleu', color: 'from-[#2b5bff] to-[#0a1b3d]' },
-  { id: 'avatar_2', emoji: '🦁', name: "Le Lion d'Or", color: 'from-[#f6c648] to-[#5a4400]' },
-  { id: 'avatar_3', emoji: '⚡', name: "L'Éclair Néon", color: 'from-[#9db4ff] to-[#2b5bff]' },
-  { id: 'avatar_4', emoji: '🏆', name: 'Le Champion', color: 'from-[#ffd97a] to-[#c79b1e]' },
-  { id: 'avatar_5', emoji: '⚽', name: 'Le Buteur', color: 'from-[#7da4ff] to-[#16284f]' },
-  { id: 'avatar_6', emoji: '🔥', name: 'Le Fervent', color: 'from-[#ff8a87] to-[#8c0009]' },
+  { id: 'avatar_zidane', emoji: '🇫🇷', name: 'Zinédine Zidane', color: 'from-[#1e3b8a] to-[#0f172a]', imagePath: '/Avatar/Zidane_hugging_soccer_ball_202606082220.jpeg' },
+  { id: 'avatar_maradona', emoji: '🇦🇷', name: 'Diego Maradona', color: 'from-[#0284c7] to-[#0f172a]', imagePath: '/Avatar/Maradona_wearing_Argentina_jersey_202606082220.jpeg' },
+  { id: 'avatar_pele', emoji: '🇧🇷', name: 'Pelé', color: 'from-[#eab308] to-[#14532d]', imagePath: '/Avatar/Pele_wearing_Brazil_jersey_202606082220.jpeg' },
+  { id: 'avatar_ronaldinho', emoji: '🇧🇷', name: 'Ronaldinho', color: 'from-[#eab308] to-[#1e3b8a]', imagePath: '/Avatar/Ronaldinho_in_Brazil_jersey_202606082220.jpeg' },
+  { id: 'avatar_ronaldo_nazario', emoji: '🇧🇷', name: 'Ronaldo Nazário', color: 'from-[#eab308] to-[#0f172a]', imagePath: '/Avatar/Ronaldo_Nazario_soccer_ball_yell…_202606082219.jpeg' },
+  { id: 'avatar_cristiano', emoji: '🇵🇹', name: 'C. Ronaldo', color: 'from-[#dc2626] to-[#14532d]', imagePath: '/Avatar/Cristiano_Ronaldo_standing_with_…_202606082220.jpeg' },
+  { id: 'avatar_mbappe', emoji: '🇫🇷', name: 'Kylian Mbappé', color: 'from-[#1e3b8a] to-[#dc2626]', imagePath: '/Avatar/Cartoon_avatar_wearing_France_je…_202606082218.jpeg' },
+  { id: 'avatar_haaland', emoji: '🇳🇴', name: 'Erling Haaland', color: 'from-[#0284c7] to-[#eab308]', imagePath: '/Avatar/Erling_Haaland_with_soccer_ball_202606082219.jpeg' },
+  { id: 'avatar_neymar', emoji: '🇧🇷', name: 'Neymar Jr', color: 'from-[#eab308] to-[#0284c7]', imagePath: '/Avatar/Neymar_Jr_winking_soccer_ball_202606082219.jpeg' },
+  { id: 'avatar_zlatan', emoji: '🇸🇪', name: 'Zlatan Ibrahimović', color: 'from-[#dc2626] to-[#0f172a]', imagePath: '/Avatar/Zlatan_Ibrahimovic_AC_Milan_jersey_202606082219.jpeg' },
+  { id: 'avatar_modric', emoji: '🇭🇷', name: 'Luka Modrić', color: 'from-[#dc2626] to-[#0284c7]', imagePath: '/Avatar/Cartoon_avatar_wearing_Croatia_j…_202606082219.jpeg' },
+  { id: 'avatar_pirlo', emoji: '🇮🇹', name: 'Andrea Pirlo', color: 'from-[#1e3b8a] to-[#0f172a]', imagePath: '/Avatar/Andrea_Pirlo_with_soccer_ball_202606082219.jpeg' },
+  { id: 'avatar_buffon', emoji: '🇮🇹', name: 'Gianluigi Buffon', color: 'from-[#6b7280] to-[#0f172a]', imagePath: '/Avatar/Cartoon_avatar_Gianluigi_Buffon_…_202606082219.jpeg' },
+  { id: 'avatar_eto', emoji: '🇨🇲', name: "Samuel Eto'o", color: 'from-[#15803d] to-[#dc2626]', imagePath: '/Avatar/Cartoon_avatar_wearing_Cameroon_…_202606082218.jpeg' },
+  { id: 'avatar_drogba', emoji: '🇨🇮', name: 'Didier Drogba', color: 'from-[#f97316] to-[#15803d]', imagePath: '/Avatar/Didier_Drogba_wearing_Ivory_Coas…_202606082219.jpeg' },
+  { id: 'avatar_henry', emoji: '🇫🇷', name: 'Thierry Henry', color: 'from-[#dc2626] to-[#1e3b8a]', imagePath: '/Avatar/Thierry_Henry_wearing_Arsenal_je…_202606082219.jpeg' },
+  { id: 'avatar_cruyff', emoji: '🇳🇱', name: 'Johan Cruyff', color: 'from-[#f97316] to-[#1e3b8a]', imagePath: '/Avatar/Johan_Cruyff_in_orange_jersey_202606082222.jpeg' },
+  { id: 'avatar_beckenbauer', emoji: '🇩🇪', name: 'F. Beckenbauer', color: 'from-[#ffffff] to-[#0f172a]', imagePath: '/Avatar/Cartoon_avatar_Franz_Beckenbauer…_202606082222.jpeg' },
+  { id: 'avatar_beckham', emoji: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', name: 'David Beckham', color: 'from-[#ffffff] to-[#1e3b8a]', imagePath: '/Avatar/David_Beckham_in_England_jersey_202606082222.jpeg' },
+  { id: 'avatar_de_bruyne', emoji: '🇧🇪', name: 'Kevin De Bruyne', color: 'from-[#0284c7] to-[#dc2626]', imagePath: '/Avatar/Kevin_De_Bruyne_soccer_ball_202606082219.jpeg' },
+  { id: 'avatar_benzema', emoji: '🇫🇷', name: 'Karim Benzema', color: 'from-[#ffffff] to-[#1e3a8a]', imagePath: '/Avatar/Karim_Benzema_holding_soccer_ball_202606082219.jpeg' },
+  { id: 'avatar_salah', emoji: '🇪🇬', name: 'Mohamed Salah', color: 'from-[#dc2626] to-[#14532d]', imagePath: '/Avatar/Mohamed_Salah_soccer_ball_profile_202606082222.jpeg' },
+  { id: 'avatar_ribery', emoji: '🇫🇷', name: 'Franck Ribéry', color: 'from-[#1e3b8a] to-[#dc2626]', imagePath: '/Avatar/Franck_Ribery_holding_soccer_ball_202606082222.jpeg' },
 ];
 
 export const getAvatarConfig = (avatarKey: string): AvatarInfo => {

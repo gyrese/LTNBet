@@ -401,6 +401,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const ev = JSON.parse(e.data);
       set({ activeEvent: { ...ev, id: 'evt-' + Date.now(), timestamp: Date.now() } });
     });
+
+    // Nouveau match créé par l'admin : recharger entièrement l'état du jeu
+    es.addEventListener('session_reset', (e) => {
+      const { match, markets } = JSON.parse(e.data);
+      set({
+        match: matchFromDb(match),
+        markets: (markets as unknown[]).map(marketFromDb),
+      });
+    });
   },
 
   // ── Auth ───────────────────────────────────────────────────────────────────

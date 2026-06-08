@@ -198,8 +198,12 @@ export default function ScreenPage() {
                           <span className={`font-score-display text-[24px] w-9 text-center tabular ${isPodium ? 'text-tertiary' : 'text-on-surface-variant/50'}`}>
                             {idx + 1}
                           </span>
-                          <div className={`w-11 h-11 rounded-full flex items-center justify-center text-xl shrink-0 border border-white/10 bg-gradient-to-br ${avatar.color}`}>
-                            {avatar.emoji}
+                          <div className={`w-11 h-11 rounded-full flex items-center justify-center text-xl shrink-0 border border-white/10 bg-gradient-to-br ${avatar.color} overflow-hidden`}>
+                            {avatar.imagePath ? (
+                              <img src={avatar.imagePath} alt={avatar.name} className="w-full h-full object-cover" />
+                            ) : (
+                              avatar.emoji
+                            )}
                           </div>
                           <span className="font-body-md font-bold truncate flex-grow text-white">
                             {player.username} {player.badgeCount ? ` 🏅${player.badgeCount}` : ''}

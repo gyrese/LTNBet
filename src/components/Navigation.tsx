@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useGameStore } from '@/lib/store';
@@ -22,23 +23,18 @@ export default function Navigation() {
       {/* ============ TOP APP BAR (desktop + tablet) ============ */}
       <header className="fixed top-0 inset-x-0 z-50">
         <div className="glass-strong border-b border-white/10 shadow-[0_10px_30px_-20px_rgba(0,0,0,0.9)]">
-          <div className="w-full max-w-container-max mx-auto flex justify-between items-center px-4 md:px-16 py-3">
+          <div className="w-full max-w-container-max mx-auto flex justify-between items-center px-4 md:px-16 py-2">
             {/* Brand */}
             <div className="flex items-center gap-3">
-              <Link href="/" className="flex items-center gap-2.5 group">
-                <div className="relative w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-secondary-container to-primary-container border border-white/15 shadow-[0_0_20px_rgba(43,91,255,0.35)] group-hover:shadow-[0_0_28px_rgba(43,91,255,0.55)] transition-shadow">
-                  <span className="material-symbols-outlined text-white text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                    sports_soccer
-                  </span>
-                </div>
-                <div className="flex flex-col leading-none">
-                  <span className="font-headline-lg-mobile text-[19px] italic uppercase tracking-tight bg-gradient-to-r from-white via-primary to-white bg-clip-text text-transparent">
-                    Stadium Live
-                  </span>
-                  <span className="hidden sm:block font-label-caps text-[8px] text-on-surface-variant/70 tracking-[0.22em] mt-0.5">
-                    LES TOILES NOIRES
-                  </span>
-                </div>
+              <Link href="/" className="flex items-center group">
+                <Image
+                  src="/logoltnbet.png"
+                  alt="LTNBet"
+                  width={200}
+                  height={80}
+                  className="h-14 md:h-16 w-auto object-contain drop-shadow-[0_0_14px_rgba(43,91,255,0.45)] group-hover:drop-shadow-[0_0_20px_rgba(43,91,255,0.7)] transition-all"
+                  priority
+                />
               </Link>
               <div className="hidden lg:flex items-center gap-1.5 font-data-mono text-[12px] text-on-surface-variant pl-4 ml-1 border-l border-white/10">
                 <span className="material-symbols-outlined text-[15px] text-primary">military_tech</span>

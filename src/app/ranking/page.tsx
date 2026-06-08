@@ -34,8 +34,12 @@ function PodiumCard({ player, place }: { player: Player; place: 1 | 2 | 3 }) {
             workspace_premium
           </span>
         )}
-        <div className={`${meta.av} rounded-full flex items-center justify-center text-3xl md:text-4xl border-[3px] ${meta.ring} ${meta.glow} bg-gradient-to-br ${cfg.color}`}>
-          {cfg.emoji}
+        <div className={`${meta.av} rounded-full flex items-center justify-center text-3xl md:text-4xl border-[3px] ${meta.ring} ${meta.glow} bg-gradient-to-br ${cfg.color} overflow-hidden`}>
+          {cfg.imagePath ? (
+            <img src={cfg.imagePath} alt={cfg.name} className="w-full h-full object-cover" />
+          ) : (
+            cfg.emoji
+          )}
         </div>
         <span
           className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center font-data-mono text-[12px] font-bold border-2 border-background"
@@ -208,8 +212,12 @@ export default function RankingPage() {
                 >
                   <span className="font-data-mono text-on-surface-variant text-center font-bold tabular">{player.rank}</span>
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg border border-white/10 shrink-0 bg-gradient-to-br ${avatar.color}`}>
-                      {avatar.emoji}
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg border border-white/10 shrink-0 bg-gradient-to-br ${avatar.color} overflow-hidden`}>
+                      {avatar.imagePath ? (
+                        <img src={avatar.imagePath} alt={avatar.name} className="w-full h-full object-cover" />
+                      ) : (
+                        avatar.emoji
+                      )}
                     </div>
                     <span className={`font-body-md truncate ${isMe ? 'text-primary font-bold' : 'text-on-surface group-hover:text-primary transition-colors'}`}>
                       {player.username} {isMe && '(Vous)'} {player.badgeCount ? ` 🏅${player.badgeCount}` : ''}
@@ -234,8 +242,12 @@ export default function RankingPage() {
               #{currentUser.rank}
             </span>
             <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg border border-primary/50 bg-gradient-to-br ${getAvatarConfig(currentUser.avatar).color}`}>
-                {getAvatarConfig(currentUser.avatar).emoji}
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg border border-primary/50 bg-gradient-to-br ${getAvatarConfig(currentUser.avatar).color} overflow-hidden`}>
+                {getAvatarConfig(currentUser.avatar).imagePath ? (
+                  <img src={getAvatarConfig(currentUser.avatar).imagePath} alt={getAvatarConfig(currentUser.avatar).name} className="w-full h-full object-cover" />
+                ) : (
+                  getAvatarConfig(currentUser.avatar).emoji
+                )}
               </div>
               <span className="font-body-md text-on-surface font-bold">
                 {currentUser.username} {currentUser.badgeCount ? ` 🏅${currentUser.badgeCount}` : ''}

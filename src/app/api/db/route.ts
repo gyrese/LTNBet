@@ -371,14 +371,25 @@ export async function POST(req: NextRequest) {
     const { match } = body;
     const matchId = match.id || 'm-' + Date.now();
 
+    const createSession = db.transaction(() => {
+    // 0. Purger toute donnée existante de ce match (idempotent : permet de relancer le même match sans erreur)
+    const oldMarkets = db.prepare('SELECT id FROM markets WHERE match_id = ?').all(matchId) as { id: string }[];
+    for (const m of oldMarkets) {
+      db.prepare('DELETE FROM outcomes WHERE market_id = ?').run(m.id);
+    }
+    db.prepare('DELETE FROM markets WHERE match_id = ?').run(matchId);
+    db.prepare('DELETE FROM bets WHERE match_id = ?').run(matchId);
+    db.prepare('DELETE FROM game_events WHERE match_id = ?').run(matchId);
+    db.prepare('DELETE FROM matches WHERE id = ?').run(matchId);
+
     // 1. Désactiver tous les autres matchs
     db.prepare('UPDATE matches SET is_active = 0').run();
 
     // 2. Insérer le nouveau match
     db.prepare(`
       INSERT INTO matches (
-        id, home_team, away_team, home_score, away_score, status, starts_at, 
-        bets_closed_at, elapsed_time, possession_home, shots_on_target_home, 
+        id, home_team, away_team, home_score, away_score, status, starts_at,
+        bets_closed_at, elapsed_time, possession_home, shots_on_target_home,
         corners_home, cards_home, is_active
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `).run(
@@ -476,13 +487,15 @@ export async function POST(req: NextRequest) {
       outcomes: db.prepare('SELECT * FROM outcomes WHERE market_id = ?').all(mkt.id as string),
     }));
 
+    return { activeMatch, activeMarkets };
+    });
+
+    const { activeMatch, activeMarkets } = createSession();
+
     broadcast('match_update', activeMatch);
     broadcast('settings_update', { doubleGainsActive: false });
-    
-    // Pour recharger les marchés chez les clients
-    for (const mkt of activeMarkets) {
-      broadcast('market_update', mkt);
-    }
+    // Nouveau match : les clients doivent recharger tout leur état (marchés inexistants chez eux)
+    broadcast('session_reset', { match: activeMatch, markets: activeMarkets });
 
     return json({ success: true, match: activeMatch, markets: activeMarkets });
   }

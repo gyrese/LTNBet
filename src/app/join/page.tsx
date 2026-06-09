@@ -6,7 +6,12 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useGameStore } from '@/lib/store';
 
-import { AVATARS } from '@/lib/avatars';
+import { AVATARS, getAvatarConfig } from '@/lib/avatars';
+
+const pickRandomAvatarId = (excludeId?: string) => {
+  const pool = excludeId ? AVATARS.filter((a) => a.id !== excludeId) : AVATARS;
+  return pool[Math.floor(Math.random() * pool.length)].id;
+};
 
 export default function JoinPage() {
   const router = useRouter();
@@ -15,6 +20,15 @@ export default function JoinPage() {
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0].id);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const currentAvatar = getAvatarConfig(selectedAvatar);
+
+  // Pioche un avatar aléatoire au montage (évite un mismatch d'hydratation SSR)
+  useEffect(() => {
+    setSelectedAvatar(pickRandomAvatarId());
+  }, []);
+
+  const shuffleAvatar = () => setSelectedAvatar((prev) => pickRandomAvatarId(prev));
 
   useEffect(() => {
     if (currentUser) {
@@ -96,47 +110,41 @@ export default function JoinPage() {
             )}
           </div>
 
-          {/* Avatars */}
+          {/* Avatar */}
           <div className="space-y-2.5">
             <label className="block font-label-caps text-[10px] text-on-surface-variant tracking-wider">
-              SÉLECTIONNEZ VOTRE AVATAR
+              VOTRE AVATAR
             </label>
-            <div className="grid grid-cols-3 gap-2.5">
-              {AVATARS.map((avatar) => {
-                const isSelected = selectedAvatar === avatar.id;
-                return (
-                  <button
-                    key={avatar.id}
-                    type="button"
-                    onClick={() => setSelectedAvatar(avatar.id)}
-                    aria-pressed={isSelected}
-                    aria-label={avatar.name}
-                    className={`relative flex flex-col items-center justify-center p-3 rounded-2xl border transition-all duration-200 cursor-pointer ${
-                      isSelected
-                        ? 'border-primary/60 bg-primary/10 glow-accent -translate-y-0.5'
-                        : 'border-white/8 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15'
-                    }`}
-                  >
-                    {isSelected && (
-                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow-[0_0_10px_rgba(125,164,255,0.7)]">
-                        <span className="material-symbols-outlined text-on-primary text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                          check
-                        </span>
-                      </span>
-                    )}
-                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${avatar.color} flex items-center justify-center text-2xl shadow-inner mb-2 border border-white/10 overflow-hidden`}>
-                      {avatar.imagePath ? (
-                        <img src={avatar.imagePath} alt={avatar.name} className="w-full h-full object-cover" />
-                      ) : (
-                        avatar.emoji
-                      )}
-                    </div>
-                    <span className="font-label-caps text-[8px] text-center text-on-surface-variant truncate w-full tracking-wide">
-                      {avatar.name}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="flex flex-col items-center gap-3 py-1">
+              <motion.div
+                key={selectedAvatar}
+                initial={{ opacity: 0, scale: 0.8, rotate: -8 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                className={`w-24 h-24 rounded-full bg-gradient-to-br ${currentAvatar.color} flex items-center justify-center text-4xl shadow-inner border border-white/10 overflow-hidden glow-accent`}
+              >
+                {currentAvatar.imagePath ? (
+                  <img src={currentAvatar.imagePath} alt={currentAvatar.name} className="w-full h-full object-cover" />
+                ) : (
+                  currentAvatar.emoji
+                )}
+              </motion.div>
+
+              <span className="font-label-caps text-[12px] text-white tracking-wide flex items-center gap-1.5">
+                <span aria-hidden>{currentAvatar.emoji}</span>
+                {currentAvatar.name}
+              </span>
+
+              <button
+                type="button"
+                onClick={shuffleAvatar}
+                className="group flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/20 transition-all cursor-pointer font-label-caps text-[10px] text-on-surface-variant tracking-wider"
+              >
+                <span className="material-symbols-outlined text-[16px] transition-transform duration-300 group-hover:rotate-180 group-active:rotate-180">
+                  refresh
+                </span>
+                ACTUALISER
+              </button>
             </div>
           </div>
 

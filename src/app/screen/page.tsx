@@ -3,22 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import { useGameStore } from '@/lib/store';
 import QRCode from 'qrcode';
-import { motion as motionClient, AnimatePresence } from 'framer-motion';
+import { motion as motionClient } from 'framer-motion';
 import GameEventOverlay from '@/components/GameEventOverlay';
 
 import { getAvatarConfig } from '@/lib/avatars';
-import { flagFor } from '@/lib/flags';
-
-const SLIDE_COUNT = 5;
+import { flagFor, flagUrlFor } from '@/lib/flags';
 
 export default function ScreenPage() {
-  const { match, leaderboard, runSimulationStep } = useGameStore();
-  const [currentSlide, setCurrentSlide] = useState(0);
+  const { match, leaderboard } = useGameStore();
   const [qrUrl, setQrUrl] = useState('');
-
   const [tickerEvents, setTickerEvents] = useState<any[]>([]);
 
-  // Periodically advance the live match simulation
+  // Periodically advance the live match simulation / sync
   useEffect(() => {
     if (match.status !== 'live') return;
     const syncInterval = setInterval(async () => {
@@ -30,14 +26,6 @@ export default function ScreenPage() {
     }, 15000);
     return () => clearInterval(syncInterval);
   }, [match.status]);
-
-  // Cycle slide view every 15s
-  useEffect(() => {
-    const slideInterval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % SLIDE_COUNT);
-    }, 15000);
-    return () => clearInterval(slideInterval);
-  }, []);
 
   // Fetch real game events for the news ticker
   useEffect(() => {
@@ -71,249 +59,256 @@ export default function ScreenPage() {
 
   const allPlayers = [...leaderboard];
   allPlayers.sort((a, b) => (b.toilesCoins + b.totalWinnings) - (a.toilesCoins + a.totalWinnings));
-  const top10 = allPlayers.slice(0, 10);
+  const top7 = allPlayers.slice(0, 7);
 
-
-
-  const slideTransition = {
-    initial: { opacity: 0, x: 50 },
-    animate: { opacity: 1, x: 0 },
-    exit: { opacity: 0, x: -50 },
-    transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] as const },
-  };
+  const homeFlagUrl = flagUrlFor(match.homeTeam);
+  const awayFlagUrl = flagUrlFor(match.awayTeam);
 
   return (
     <div className="h-dvh w-screen text-on-surface overflow-hidden relative font-body-lg select-none">
       {/* Cinematic backdrop layers */}
-      <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_-5%,rgba(43,91,255,0.25),transparent_60%),radial-gradient(ellipse_50%_40%_at_90%_100%,rgba(255,59,71,0.12),transparent_60%),linear-gradient(180deg,#0a1124,#070b16)] pointer-events-none" />
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_-5%,rgba(43,91,255,0.22),transparent_60%),radial-gradient(ellipse_50%_40%_at_90%_100%,rgba(255,59,71,0.1),transparent_60%),linear-gradient(180deg,#070b16,#03050a)] pointer-events-none" />
 
-      <div className="relative w-full h-full flex flex-col max-w-[1920px] mx-auto p-8 pb-[100px] z-10">
-
+      <div className="relative w-full h-full flex flex-col max-w-[1920px] mx-auto p-6 pb-[96px] z-10">
+        
         {/* Header */}
-        <header className="glass-strong border border-white/10 flex justify-between items-center w-full px-10 py-4 rounded-2xl mb-7">
+        <header className="glass-strong border border-white/10 flex justify-between items-center w-full px-8 py-3.5 rounded-2xl mb-5 shadow-2xl">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-gradient-to-br from-secondary-container to-primary-container border border-white/15 shadow-[0_0_24px_rgba(43,91,255,0.4)]">
-              <span className="material-symbols-outlined text-white text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-gradient-to-br from-secondary-container to-primary-container border border-white/15 shadow-[0_0_20px_rgba(43,91,255,0.35)]">
+              <span className="material-symbols-outlined text-white text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>
                 sports_soccer
               </span>
             </div>
-            <span className="font-headline-lg text-[26px] italic uppercase tracking-tighter bg-gradient-to-r from-white via-primary to-white bg-clip-text text-transparent">
+            <span className="font-headline-lg text-[22px] italic uppercase tracking-tighter bg-gradient-to-r from-white via-primary to-white bg-clip-text text-transparent">
               Les Toiles Noires Predictor
             </span>
           </div>
 
           <div className="flex items-center gap-6">
-            <div className="bg-error/12 border border-error/30 px-6 py-2.5 rounded-full flex items-center gap-3">
-              {match.status === 'live' && <span className="live-dot" />}
-              <span className="font-label-caps text-[13px] text-on-surface tracking-widest uppercase tabular">
+            <div className="bg-error/12 border border-error/30 px-5 py-2 rounded-full flex items-center gap-2.5">
+              {match.status === 'live' && <span className="live-dot animate-pulse" />}
+              <span className="font-label-caps text-[12px] text-white tracking-widest uppercase font-bold">
                 {match.status === 'live' ? `DIRECT · ${match.elapsedTime}'` : match.status === 'half_time' ? 'MI-TEMPS' : match.status === 'finished' ? 'TERMINÉ' : 'AVANT-MATCH'}
               </span>
-            </div>
-            {/* Slide dots */}
-            <div className="flex items-center gap-2">
-              {Array.from({ length: SLIDE_COUNT }).map((_, i) => (
-                <span
-                  key={i}
-                  className={`h-2 rounded-full transition-all duration-500 ${
-                    i === currentSlide ? 'w-7 bg-primary shadow-[0_0_10px_rgba(125,164,255,0.8)]' : 'w-2 bg-white/20'
-                  }`}
-                />
-              ))}
             </div>
           </div>
         </header>
 
-        {/* Carousel */}
-        <div className="flex-grow flex items-center justify-center relative w-full overflow-hidden">
-          <AnimatePresence mode="wait">
+        {/* Dashboard Grid */}
+        <div className="flex-grow grid grid-cols-12 gap-6 items-stretch overflow-hidden h-[calc(100%-80px)]">
+          
+          {/* LEFT SECTION (Match & Stats) - 7 cols */}
+          <div className="col-span-7 flex flex-col gap-6">
+            
+            {/* Live Score Widget */}
+            <div className="glass-strong border border-white/10 rounded-3xl p-8 flex flex-col justify-center relative overflow-hidden shadow-2xl flex-grow max-h-[45%]">
+              <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-primary via-secondary-container to-error shadow-[0_0_15px_rgba(3,86,255,0.4)]" />
+              
+              <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-3">
+                <span className="font-label-caps text-[12px] text-on-surface-variant tracking-[0.2em] font-bold">SCORE DU MATCH</span>
+                <span className="font-data-mono text-[16px] text-primary font-bold">{match.elapsedTime}&apos;</span>
+              </div>
 
-            {/* SLIDE 1: Match */}
-            {currentSlide === 0 && (
-              <motionClient.div key="slide-match" {...slideTransition} className="w-full grid grid-cols-12 gap-8 items-center h-full">
-                <div className="col-span-6 glass-panel gradient-border rounded-3xl p-10 h-full flex flex-col justify-center">
-                  <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-4">
-                    <span className="font-label-caps text-[14px] text-on-surface-variant tracking-[0.2em]">SCORE EN DIRECT</span>
-                    <span className="font-data-mono text-[20px] text-primary tabular">{match.elapsedTime}&apos;</span>
-                  </div>
-
-                  <div className="flex items-center justify-between px-4">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="w-24 h-24 rounded-3xl bg-surface-container/80 flex items-center justify-center text-5xl shadow-lg border border-white/10">{flagFor(match.homeTeam)}</div>
-                      <span className="font-display-hero text-[30px] text-white">{(match.homeTeam || 'DOM').slice(0, 3).toUpperCase()}</span>
-                    </div>
-
-                    <div className="font-score-display text-[72px] flex items-center gap-3">
-                      <span className="text-primary text-glow-blue">{match.homeScore}</span>
-                      <span className="text-on-surface-variant/40 text-[44px]">:</span>
-                      <span className="text-white">{match.awayScore}</span>
-                    </div>
-
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="w-24 h-24 rounded-3xl bg-surface-container/80 flex items-center justify-center text-5xl shadow-lg border border-white/10">{flagFor(match.awayTeam)}</div>
-                      <span className="font-display-hero text-[30px] text-on-surface-variant">{(match.awayTeam || 'EXT').slice(0, 3).toUpperCase()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="col-span-6 glass-panel rounded-3xl p-10 h-full flex flex-col justify-center">
-                  <h3 className="font-label-caps text-[16px] text-primary tracking-widest mb-8 border-b border-white/10 pb-4">STATISTIQUES DE JEU</h3>
-                  <div className="space-y-7">
-                    <TvStat label="POSSESSION" left={`${match.possessionHome}%`} right={`${100 - match.possessionHome}%`} pct={match.possessionHome} />
-                    <TvStat label="TIRS CADRÉS" left={`${match.shotsOnTargetHome}`} right="2" pct={(match.shotsOnTargetHome / (match.shotsOnTargetHome + 2)) * 100} />
-
-                    <div className="grid grid-cols-2 gap-6 pt-2">
-                      <div className="bg-white/[0.03] p-5 rounded-2xl border border-white/8 text-center">
-                        <span className="block font-label-caps text-[11px] text-on-surface-variant mb-2 tracking-wider">CORNERS FRANCE</span>
-                        <span className="font-score-display text-[34px] text-primary tabular">{match.cornersHome}</span>
-                      </div>
-                      <div className="bg-white/[0.03] p-5 rounded-2xl border border-white/8 text-center">
-                        <span className="block font-label-caps text-[11px] text-on-surface-variant mb-2 tracking-wider">CARTONS FRANCE</span>
-                        <span className="font-score-display text-[34px] text-error tabular">{match.cardsHome}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motionClient.div>
-            )}
-
-            {/* SLIDE 2: Leaderboard */}
-            {currentSlide === 1 && (
-              <motionClient.div key="slide-leaderboard" {...slideTransition} className="w-full max-w-4xl h-full flex flex-col justify-center">
-                <div className="glass-panel gradient-border rounded-3xl p-8 flex flex-col h-full justify-center">
-                  <h3 className="font-headline-lg text-[28px] text-primary uppercase italic tracking-tight mb-6 flex items-center gap-3 border-b border-white/10 pb-4">
-                    <span className="material-symbols-outlined text-[32px] text-tertiary" style={{ fontVariationSettings: "'FILL' 1" }}>leaderboard</span>
-                    Classement Global · Top 10
-                  </h3>
-
-                  <div className="grid grid-cols-2 gap-3.5">
-                    {top10.map((player, idx) => {
-                      const avatar = getAvatarConfig(player.avatar);
-                      const isPodium = idx < 3;
-                      return (
-                        <div
-                          key={player.id}
-                          className={`flex items-center gap-4 p-3.5 rounded-2xl border ${
-                            isPodium ? 'border-tertiary/25 bg-tertiary/6' : 'border-white/6 bg-white/[0.03]'
-                          }`}
-                        >
-                          <span className={`font-score-display text-[24px] w-9 text-center tabular ${isPodium ? 'text-tertiary' : 'text-on-surface-variant/50'}`}>
-                            {idx + 1}
-                          </span>
-                          <div className={`w-11 h-11 rounded-full flex items-center justify-center text-xl shrink-0 border border-white/10 bg-gradient-to-br ${avatar.color} overflow-hidden`}>
-                            {avatar.imagePath ? (
-                              <img src={avatar.imagePath} alt={avatar.name} className="w-full h-full object-cover" />
-                            ) : (
-                              avatar.emoji
-                            )}
-                          </div>
-                          <span className="font-body-md font-bold truncate flex-grow text-white">
-                            {player.username} {player.badgeCount ? ` 🏅${player.badgeCount}` : ''}
-                          </span>
-                          <span className={`font-data-mono text-[16px] font-bold tabular ${isPodium ? 'text-tertiary' : 'text-primary'}`}>
-                            {(player.toilesCoins + player.totalWinnings).toLocaleString()} TC
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </motionClient.div>
-            )}
-
-            {/* SLIDE 3: Winners */}
-            {currentSlide === 2 && (
-              <motionClient.div key="slide-wins" {...slideTransition} className="w-full max-w-3xl h-full flex flex-col justify-center text-center">
-                <div className="glass-panel gradient-border rounded-3xl p-10">
-                  <span className="material-symbols-outlined text-[72px] text-tertiary mb-6 animate-pulse" style={{ fontVariationSettings: "'FILL' 1" }}>
-                    workspace_premium
-                  </span>
-                  <h2 className="font-headline-lg text-[32px] text-white italic uppercase tracking-tighter mb-8">Dernières Mises Gagnantes 🎉</h2>
-
-                  <div className="space-y-4 text-left max-w-xl mx-auto">
-                    {[
-                      { e: '🦁', n: 'AlexPro99', m: 'Buteur Kylian Mbappé', v: '+320 TC' },
-                      { e: '🐓', n: 'ToileMaster', m: 'Score Exact 1-0', v: '+450 TC' },
-                      { e: '⚡', n: 'ShadowBet', m: 'France Résultat Final', v: '+140 TC' },
-                    ].map((w) => (
-                      <div key={w.n} className="glass-panel p-4 rounded-2xl border-l-[3px] border-l-emerald-500 flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{w.e}</span>
-                          <div>
-                            <p className="font-body-md font-bold text-white leading-tight">{w.n}</p>
-                            <p className="font-label-caps text-[10px] text-on-surface-variant tracking-wider">{w.m}</p>
-                          </div>
-                        </div>
-                        <span className="font-data-mono text-emerald-400 font-bold text-[20px] tabular">{w.v}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </motionClient.div>
-            )}
-
-            {/* SLIDE 4: QR */}
-            {currentSlide === 3 && (
-              <motionClient.div key="slide-qr" {...slideTransition} className="w-full max-w-4xl h-full flex items-center justify-center">
-                <div className="glass-strong gradient-border rounded-3xl p-10 flex items-center gap-12 w-full max-w-3xl">
-                  <div className="bg-white p-4 rounded-2xl shadow-[0_0_40px_rgba(125,164,255,0.25)] shrink-0 flex items-center justify-center">
-                    {qrUrl ? (
-                      <img src={qrUrl} alt="QR Code" className="w-56 h-56 object-contain" />
+              <div className="flex items-center justify-between px-6">
+                {/* Home Team */}
+                <div className="flex flex-col items-center gap-3.5 w-1/3">
+                  <div className="w-28 h-20 rounded-2xl bg-surface-container/80 flex items-center justify-center overflow-hidden shadow-[0_0_20px_rgba(255,255,255,0.06)] border border-white/15 relative group">
+                    {homeFlagUrl ? (
+                      <img src={homeFlagUrl} alt={match.homeTeam} className="w-full h-full object-cover transform scale-105" />
                     ) : (
-                      <div className="w-56 h-56 bg-surface-container animate-pulse rounded-xl" />
+                      <span className="text-5xl">{flagFor(match.homeTeam)}</span>
                     )}
                   </div>
+                  <span className="font-headline-lg text-[22px] font-bold text-white tracking-wide uppercase truncate w-full text-center">
+                    {match.homeTeam || 'DOMICILE'}
+                  </span>
+                </div>
 
-                  <div className="text-left space-y-4">
-                    <h2 className="font-headline-lg text-[42px] italic uppercase tracking-tighter leading-none bg-gradient-to-r from-white to-primary bg-clip-text text-transparent">
-                      Rejoignez la partie en direct !
-                    </h2>
-                    <p className="font-body-lg text-[18px] text-on-surface-variant">
-                      Scannez ce QR Code, choisissez votre pseudo et pariez avec vos 1 000 ToilesCoins offerts !
-                    </p>
-                    <div className="flex items-center gap-2 text-primary">
-                      <span className="material-symbols-outlined text-[24px]">phone_iphone</span>
-                      <span className="font-label-caps text-[13px] tracking-widest font-bold">100% LUDIQUE &amp; GRATUIT</span>
+                {/* Score */}
+                <div className="font-score-display text-[64px] flex items-center gap-4 w-1/3 justify-center select-none font-black">
+                  <span className="text-primary drop-shadow-[0_0_20px_rgba(125,164,255,0.5)]">{match.homeScore}</span>
+                  <span className="text-on-surface-variant/30 text-[36px] font-normal">:</span>
+                  <span className="text-white">{match.awayScore}</span>
+                </div>
+
+                {/* Away Team */}
+                <div className="flex flex-col items-center gap-3.5 w-1/3">
+                  <div className="w-28 h-20 rounded-2xl bg-surface-container/80 flex items-center justify-center overflow-hidden shadow-[0_0_20px_rgba(255,255,255,0.06)] border border-white/15 relative group">
+                    {awayFlagUrl ? (
+                      <img src={awayFlagUrl} alt={match.awayTeam} className="w-full h-full object-cover transform scale-105" />
+                    ) : (
+                      <span className="text-5xl">{flagFor(match.awayTeam)}</span>
+                    )}
+                  </div>
+                  <span className="font-headline-lg text-[22px] font-bold text-on-surface-variant tracking-wide uppercase truncate w-full text-center">
+                    {match.awayTeam || 'EXTÉRIEUR'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Match Stats Widget */}
+            <div className="glass-panel rounded-3xl p-6 flex flex-col justify-center shadow-2xl flex-grow max-h-[55%]">
+              <h3 className="font-label-caps text-[14px] text-primary tracking-widest mb-4 border-b border-white/10 pb-2 font-bold">
+                STATISTIQUES DU MATCH
+              </h3>
+              <div className="space-y-4">
+                <ComparisonStat 
+                  label="POSSESSION" 
+                  leftVal={match.possessionHome} 
+                  rightVal={100 - match.possessionHome} 
+                  leftLabel={`${match.possessionHome}%`} 
+                  rightLabel={`${100 - match.possessionHome}%`} 
+                />
+
+                <ComparisonStat 
+                  label="TIRS (CADRÉS)" 
+                  leftVal={match.shotsHome} 
+                  rightVal={match.shotsAway} 
+                  leftLabel={`${match.shotsHome} (${match.shotsOnTargetHome})`} 
+                  rightLabel={`${match.shotsAway} (${match.shotsOnTargetAway})`} 
+                />
+
+                {(() => {
+                  const xGHome = (match.homeScore * 0.75 + match.shotsOnTargetHome * 0.12 + (match.shotsHome - match.shotsOnTargetHome) * 0.04);
+                  const xGAway = (match.awayScore * 0.75 + match.shotsOnTargetAway * 0.12 + (match.shotsAway - match.shotsOnTargetAway) * 0.04);
+                  const xGHomeStr = xGHome === 0 ? "0.00" : xGHome.toFixed(2);
+                  const xGAwayStr = xGAway === 0 ? "0.00" : xGAway.toFixed(2);
+                  return (
+                    <ComparisonStat 
+                      label="EXPECTED GOALS (XG) - ESTIMÉ" 
+                      leftVal={xGHome} 
+                      rightVal={xGAway} 
+                      leftLabel={xGHomeStr} 
+                      rightLabel={xGAwayStr} 
+                    />
+                  );
+                })()}
+
+                <ComparisonStat 
+                  label="PRÉCISION PASSES" 
+                  leftVal={match.passesAccuracyHome} 
+                  rightVal={match.passesAccuracyAway} 
+                  leftLabel={`${match.passesAccuracyHome}%`} 
+                  rightLabel={`${match.passesAccuracyAway}%`} 
+                />
+
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div className="bg-white/[0.02] px-3 py-2 rounded-xl border border-white/8 text-center flex flex-col justify-center">
+                    <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider uppercase font-bold">CORNERS</span>
+                    <div className="flex justify-between items-center px-1">
+                      <span className="font-score-display text-[20px] text-primary font-bold">{match.cornersHome}</span>
+                      <span className="text-on-surface-variant/30 text-[10px]">:</span>
+                      <span className="font-score-display text-[20px] text-white font-bold">{match.cornersAway}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white/[0.02] px-3 py-2 rounded-xl border border-white/8 text-center flex flex-col justify-center">
+                    <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider uppercase font-bold">FAUTES</span>
+                    <div className="flex justify-between items-center px-1">
+                      <span className="font-score-display text-[20px] text-primary font-bold">{match.foulsHome}</span>
+                      <span className="text-on-surface-variant/30 text-[10px]">:</span>
+                      <span className="font-score-display text-[20px] text-white font-bold">{match.foulsAway}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/[0.02] px-3 py-2 rounded-xl border border-white/8 text-center flex flex-col justify-center">
+                    <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider uppercase font-bold">CARTONS</span>
+                    <div className="flex justify-between items-center px-1">
+                      <span className="font-score-display text-[20px] text-error font-bold">{match.cardsHome}</span>
+                      <span className="text-on-surface-variant/30 text-[10px]">:</span>
+                      <span className="font-score-display text-[20px] text-white font-bold">{match.cardsAway}</span>
                     </div>
                   </div>
                 </div>
-              </motionClient.div>
-            )}
+              </div>
+            </div>
 
-            {/* SLIDE 5: Badges */}
-            {currentSlide === 4 && (
-              <motionClient.div key="slide-badges" {...slideTransition} className="w-full max-w-3xl h-full flex flex-col justify-center text-center">
-                <div className="glass-panel gradient-border rounded-3xl p-10">
-                  <span className="material-symbols-outlined text-[72px] text-secondary mb-6" style={{ fontVariationSettings: "'FILL' 1" }}>military_tech</span>
-                  <h2 className="font-headline-lg text-[32px] text-white italic uppercase tracking-tighter mb-8">Derniers Badges Débloqués 🏅</h2>
+          </div>
 
-                  <div className="grid grid-cols-3 gap-6 max-w-2xl mx-auto">
-                    {[
-                      { ic: 'emoji_events', n: 'ToileMaster', b: 'Nostradamus', c: 'border-t-tertiary', bg: 'from-tertiary to-[#e08a1e]' },
-                      { ic: 'hub', n: 'AlexPro99', b: 'Légende', c: 'border-t-secondary', bg: 'from-secondary to-secondary-container' },
-                      { ic: 'visibility', n: 'ShadowBet', b: 'Oracle Bleu', c: 'border-t-primary', bg: 'from-primary to-secondary-container' },
-                    ].map((bd) => (
-                      <div key={bd.n} className={`glass-panel rounded-2xl p-6 border-t-2 ${bd.c} flex flex-col items-center`}>
-                        <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${bd.bg} flex items-center justify-center text-white mb-3`}>
-                          <span className="material-symbols-outlined text-[26px]" style={{ fontVariationSettings: "'FILL' 1" }}>{bd.ic}</span>
+          {/* RIGHT SECTION (Leaderboard & QR Code) - 5 cols */}
+          <div className="col-span-5 flex flex-col gap-6">
+            
+            {/* Leaderboard Card */}
+            <div className="glass-panel rounded-3xl p-6 shadow-2xl flex flex-col justify-between flex-grow max-h-[62%]">
+              <div>
+                <h3 className="font-headline-lg text-[22px] text-primary uppercase italic tracking-tight mb-4 flex items-center gap-2.5 border-b border-white/10 pb-3">
+                  <span className="material-symbols-outlined text-[26px] text-tertiary" style={{ fontVariationSettings: "'FILL' 1" }}>leaderboard</span>
+                  Classement Live · Top 7
+                </h3>
+
+                <div className="flex flex-col gap-2.5">
+                  {top7.map((player, idx) => {
+                    const avatar = getAvatarConfig(player.avatar);
+                    const isPodium = idx < 3;
+                    return (
+                      <div
+                        key={player.id}
+                        className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all duration-300 ${
+                          isPodium 
+                            ? 'border-tertiary/20 bg-tertiary/5 shadow-[0_0_15px_rgba(233,196,0,0.03)]' 
+                            : 'border-white/5 bg-white/[0.02]'
+                        }`}
+                      >
+                        <span className={`font-score-display text-[18px] w-7 text-center tabular font-bold ${isPodium ? 'text-tertiary' : 'text-on-surface-variant/40'}`}>
+                          {idx + 1}
+                        </span>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg shrink-0 border border-white/10 bg-gradient-to-br ${avatar.color} overflow-hidden`}>
+                          {avatar.imagePath ? (
+                            <img src={avatar.imagePath} alt={avatar.name} className="w-full h-full object-cover" />
+                          ) : (
+                            avatar.emoji
+                          )}
                         </div>
-                        <span className="font-body-md font-bold text-white text-[15px] truncate w-full">{bd.n}</span>
-                        <span className="font-label-caps text-[9px] text-on-surface-variant mt-1 tracking-wider">{bd.b}</span>
+                        <span className="font-body-md font-bold truncate flex-grow text-white text-[15px]">
+                          {player.username} {player.badgeCount ? ` 🏅${player.badgeCount}` : ''}
+                        </span>
+                        <span className={`font-data-mono text-[14px] font-bold tabular ${isPodium ? 'text-tertiary' : 'text-primary'}`}>
+                          {(player.toilesCoins + player.totalWinnings).toLocaleString()} TC
+                        </span>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-              </motionClient.div>
-            )}
+              </div>
+            </div>
 
-          </AnimatePresence>
+            {/* QR Code Card */}
+            <div className="glass-strong border border-white/10 rounded-3xl p-6 shadow-2xl flex items-center gap-6 flex-grow max-h-[38%] relative overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary-container/20 to-transparent pointer-events-none" />
+              
+              <div className="bg-white p-3 rounded-2xl shadow-[0_0_30px_rgba(43,91,255,0.25)] shrink-0 flex items-center justify-center border-2 border-primary/20 relative z-10 group-hover:scale-105 transition-transform duration-300">
+                {qrUrl ? (
+                  <img src={qrUrl} alt="QR Code" className="w-32 h-32 object-contain" />
+                ) : (
+                  <div className="w-32 h-32 bg-surface-container animate-pulse rounded-xl" />
+                )}
+              </div>
+
+              <div className="text-left space-y-2 relative z-10 flex-grow">
+                <h2 className="font-headline-lg text-[22px] italic uppercase tracking-tighter leading-tight bg-gradient-to-r from-white to-primary bg-clip-text text-transparent font-black">
+                  PRÊT À PARIER ?
+                </h2>
+                <p className="font-body-md text-[13px] text-on-surface-variant leading-relaxed">
+                  Scannez pour rejoindre la partie, choisissez votre pseudo et recevez <strong className="text-white font-bold">1 000 ToilesCoins offerts</strong> !
+                </p>
+                <div className="flex items-center gap-1.5 text-primary pt-1">
+                  <span className="material-symbols-outlined text-[18px]">phone_iphone</span>
+                  <span className="font-label-caps text-[10px] tracking-widest font-bold">100% GRATUIT &amp; INSTANTANÉ</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
         </div>
 
         <GameEventOverlay />
 
-        {/* Ticker */}
+        {/* Ticker Bottom Banner */}
         <div className="absolute bottom-0 left-0 w-full h-[76px] glass-strong border-t border-white/10 flex items-center overflow-hidden z-50">
-          <div className="h-full bg-gradient-to-r from-secondary-container to-[#1e46e0] px-8 flex items-center justify-center z-10 border-r border-white/20 shrink-0">
-            <span className="font-headline-lg text-[18px] text-white uppercase italic tracking-wider font-bold whitespace-nowrap">
+          <div className="h-full bg-gradient-to-r from-secondary-container to-[#1e46e0] px-8 flex items-center justify-center z-10 border-r border-white/20 shadow-[10px_0_25px_rgba(0,0,0,0.5)] shrink-0">
+            <span className="font-headline-lg text-[16px] text-white uppercase italic tracking-wider font-extrabold whitespace-nowrap">
               EN DIRECT DU BAR
             </span>
           </div>
@@ -328,8 +323,8 @@ export default function ScreenPage() {
                       const color = evt.type === 'goal' ? 'text-primary' : evt.type === 'badge' ? 'text-error' : 'text-secondary';
                       return (
                         <span key={evt.id + '-' + rep} className="flex items-center gap-3">
-                          <span className={`material-symbols-outlined ${color} text-[24px]`} style={{ fontVariationSettings: "'FILL' 1" }}>{icon}</span>
-                          <span className="font-data-mono text-[18px] text-on-surface">
+                          <span className={`material-symbols-outlined ${color} text-[22px]`} style={{ fontVariationSettings: "'FILL' 1" }}>{icon}</span>
+                          <span className="font-data-mono text-[16px] text-on-surface">
                             <span className={`font-bold ${color}`}>{evt.title}</span> {evt.subtitle}
                           </span>
                         </span>
@@ -338,14 +333,14 @@ export default function ScreenPage() {
                   ) : (
                     <>
                       <span className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-tertiary text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>monetization_on</span>
-                        <span className="font-data-mono text-[18px] text-on-surface">
+                        <span className="material-symbols-outlined text-tertiary text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>monetization_on</span>
+                        <span className="font-data-mono text-[16px] text-on-surface">
                           REJOIGNEZ LA PARTIE EN SCANNANT LE QR CODE ! RECEVEZ 1 000 TOILESCOINS GRATUITS.
                         </span>
                       </span>
                       <span className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-primary text-[24px]">sports_soccer</span>
-                        <span className="font-data-mono text-[18px] text-on-surface">
+                        <span className="material-symbols-outlined text-primary text-[22px]">sports_soccer</span>
+                        <span className="font-data-mono text-[16px] text-on-surface">
                           PRÉDISEZ LE SCORE DU MATCH ET GAGNEZ DES PINTES GRATUITES AU BAR !
                         </span>
                       </span>
@@ -362,17 +357,36 @@ export default function ScreenPage() {
   );
 }
 
+function ComparisonStat({ label, leftVal, rightVal, leftLabel, rightLabel }: { label: string; leftVal: number; rightVal: number; leftLabel?: string; rightLabel?: string }) {
+  const total = leftVal + rightVal || 1;
+  const pctLeft = (leftVal / total) * 100;
+  return (
+    <div>
+      <div className="flex justify-between font-data-mono text-[13px] text-white mb-1">
+        <span className="text-primary font-bold tabular">{leftLabel ?? leftVal}</span>
+        <span className="font-label-caps text-[10px] text-on-surface-variant tracking-wider font-bold">{label}</span>
+        <span className="tabular text-white font-bold">{rightLabel ?? rightVal}</span>
+      </div>
+      <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden flex border border-white/5">
+        <div className="h-full bg-primary transition-all duration-500" style={{ width: `${pctLeft}%` }} />
+        <div className="h-full bg-white/20 transition-all duration-500 flex-grow" style={{ width: `${100 - pctLeft}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function TvStat({ label, left, right, pct }: { label: string; left: string; right: string; pct: number }) {
   return (
     <div>
-      <div className="flex justify-between font-data-mono text-[16px] text-white mb-2">
+      <div className="flex justify-between font-data-mono text-[14px] text-white mb-1.5">
         <span className="text-primary font-bold tabular">{left}</span>
-        <span className="font-label-caps text-[11px] text-on-surface-variant tracking-wider">{label}</span>
+        <span className="font-label-caps text-[10px] text-on-surface-variant tracking-wider font-bold">{label}</span>
         <span className="tabular text-on-surface-variant">{right}</span>
       </div>
-      <div className="h-3 w-full bg-white/8 rounded-full overflow-hidden">
+      <div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
         <div className="h-full bg-gradient-to-r from-secondary-container to-primary rounded-full transition-all duration-500" style={{ width: `${Math.max(2, Math.min(100, pct))}%` }} />
       </div>
     </div>
   );
 }
+

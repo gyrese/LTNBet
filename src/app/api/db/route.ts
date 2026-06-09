@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import db from '@/lib/db';
+import db, { suspendImpossibleOutcomes } from '@/lib/db';
 import { broadcast } from '@/lib/sse-bus';
 import { calculateDynamicOdds } from '@/lib/odds';
 import { triggerWebhooks } from '@/lib/webhooks';
+import { getParsedOdds } from '@/lib/odds-provider';
+import { buildSessionBlueprint, type BlueprintMarket } from '@/lib/session-blueprint';
+import { getOnlinePlayers, countOnline, clearPresence } from '@/lib/presence';
 
 const ARCHIVE_DIR = path.join(process.cwd(), 'data', 'archives');
 const CLOSE_AFTER_MS = 30 * 60 * 1000; // 30 min après la fin du match
@@ -142,6 +145,7 @@ export async function GET(req: NextRequest) {
     const id = req.nextUrl.searchParams.get('id');
     if (!id) return json({ error: 'missing id' }, 400);
     const player = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
+    if (!player) return json({ player: null }, 200);
     const bets = db.prepare('SELECT * FROM bets WHERE user_id = ? ORDER BY created_at DESC').all(id);
 
     // Initialize player missions if empty
@@ -172,6 +176,11 @@ export async function GET(req: NextRequest) {
   if (op === 'ticker') {
     const events = db.prepare('SELECT * FROM game_events ORDER BY created_at DESC LIMIT 10').all();
     return json({ events });
+  }
+
+  // Présence : joueurs réels actuellement connectés (heartbeat récent), pour le panel admin.
+  if (op === 'presence') {
+    return json({ players: getOnlinePlayers(), count: countOnline() });
   }
 
   return json({ error: 'unknown op' }, 400);
@@ -310,6 +319,9 @@ export async function POST(req: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(activeMatchId) as any;
+    if (match) {
+      suspendImpossibleOutcomes(match.id, match.home_score, match.away_score);
+    }
 
     // Trigger webhooks
     if (stats.status) {
@@ -342,6 +354,44 @@ export async function POST(req: NextRequest) {
     const file = closeAndArchive(activeMatchId);
     broadcast('session_closed', { matchId: activeMatchId, archive: file });
     return json({ success: true, archive: file });
+  }
+
+  // ── Exclure un joueur précis (kick) : déconnexion forcée ciblée ──
+  if (op === 'kick_player') {
+    const { userId } = body;
+    if (!userId) return json({ success: false, error: 'Joueur manquant.' });
+    clearPresence(userId);
+    broadcast('force_logout', { userId });
+    return json({ success: true });
+  }
+
+  // ── Déconnecter tous les joueurs (sans fermer la session) ──
+  if (op === 'kick_all') {
+    db.prepare('UPDATE players SET last_seen = NULL WHERE is_bot = 0').run();
+    broadcast('force_logout', { all: true });
+    return json({ success: true });
+  }
+
+  // ── Supprimer la session : efface toute donnée liée à ce match ──
+  if (op === 'delete_session') {
+    const matchId = body.matchId || getActiveMatchId();
+    if (!matchId) return json({ success: false, error: 'Aucun match à supprimer.' });
+
+    const deleteSession = db.transaction(() => {
+      const oldMarkets = db.prepare('SELECT id FROM markets WHERE match_id = ?').all(matchId) as { id: string }[];
+      for (const m of oldMarkets) {
+        db.prepare('DELETE FROM outcomes WHERE market_id = ?').run(m.id);
+      }
+      db.prepare('DELETE FROM markets WHERE match_id = ?').run(matchId);
+      db.prepare('DELETE FROM bets WHERE match_id = ?').run(matchId);
+      db.prepare('DELETE FROM game_events WHERE match_id = ?').run(matchId);
+      db.prepare('DELETE FROM game_settings WHERE match_id = ?').run(matchId);
+      db.prepare('DELETE FROM matches WHERE id = ?').run(matchId);
+    });
+
+    deleteSession();
+    broadcast('session_reset', { match: null, markets: [] });
+    return json({ success: true });
   }
 
   // ── Réinitialiser : efface tout (matchs, marchés, paris, joueurs réels) pour repartir propre ──
@@ -541,68 +591,57 @@ export async function POST(req: NextRequest) {
     return json({ success: true, rewardLedger });
   }
 
+  // ── Prévisualiser une session (cotes auto) SANS persister — pour l'écran de revue admin ──
+  if (op === 'preview_session') {
+    const { match } = body;
+    if (!match || !match.homeTeam || !match.awayTeam) {
+      return json({ success: false, error: 'Match invalide.' });
+    }
+    const matchId = match.id || 'm-' + Date.now();
+    const eventId = match.oddsEventId ?? (typeof matchId === 'string' && matchId.startsWith('oai-') ? matchId.slice(4) : null);
+
+    const parsed = eventId ? await getParsedOdds(eventId) : null;
+    const markets = buildSessionBlueprint({ id: matchId, homeTeam: match.homeTeam, awayTeam: match.awayTeam }, parsed);
+    const apiOddsCount = markets.reduce((s, m) => s + m.outcomes.filter(o => o.oddsSource === 'api').length, 0);
+
+    return json({
+      success: true,
+      match: { ...match, id: matchId },
+      markets,
+      oddsBookmaker: parsed?.bookmaker ?? null,
+      apiOddsCount,
+    });
+  }
+
   // ── Create match session ──
   if (op === 'create_session') {
     const { match } = body;
     const matchId = match.id || 'm-' + Date.now();
 
     // Garde-fou : une seule session active à la fois. On refuse de lancer un AUTRE match
-    // tant que la session en cours n'est pas fermée (sauf relance du même match).
+    // tant que la session en cours n'est pas fermée (sauf relance du même match ou force).
     const active = getActiveMatchRow();
-    if (active && active.id !== matchId) {
+    if (active && active.id !== matchId && !body.force && !(match && match.force)) {
       return json({
         success: false,
         error: `Une session est déjà en cours (${active.home_team} vs ${active.away_team}). Fermez-la avant d'en lancer une nouvelle.`,
       });
     }
-    // 5. Récupérer les cotes de base (avec option The Odds API)
-    let baseOddsHome = 1.80;
-    let baseOddsDraw = 3.20;
-    let baseOddsAway = 2.90;
-    let baseOddsOu25Yes = 2.10;
-    let baseOddsOu25No = 1.70;
+    // Cotes : lien direct par event id odds-api.io (aucun matching de noms).
+    // - Si l'admin a revu/édité les marchés (body.markets), on les conserve tels quels.
+    // - Sinon on récupère les cotes auto et on construit le blueprint (cote réelle ou défaut).
+    const eventId = match.oddsEventId ?? (typeof matchId === 'string' && matchId.startsWith('oai-') ? matchId.slice(4) : null);
 
-    const oddsApiKey = process.env.THE_ODDS_API_KEY;
-    if (oddsApiKey) {
-      try {
-        const res = await fetch(`https://api.the-odds-api.com/v4/sports/soccer/odds/?regions=eu&oddsFormat=decimal&apiKey=${oddsApiKey}`)
-          .then(r => r.json());
-
-        if (Array.isArray(res)) {
-          const apiMatch = res.find((m: any) => 
-            m.home_team.toLowerCase().includes(match.homeTeam.toLowerCase()) || 
-            match.homeTeam.toLowerCase().includes(m.home_team.toLowerCase()) ||
-            m.away_team.toLowerCase().includes(match.awayTeam.toLowerCase()) ||
-            match.awayTeam.toLowerCase().includes(m.away_team.toLowerCase())
-          );
-
-          if (apiMatch && apiMatch.bookmakers && apiMatch.bookmakers[0]) {
-            const h2hMarket = apiMatch.bookmakers[0].markets.find((m: any) => m.key === 'h2h');
-            if (h2hMarket && Array.isArray(h2hMarket.outcomes)) {
-              const homeOutcome = h2hMarket.outcomes.find((o: any) => o.name === apiMatch.home_team);
-              const awayOutcome = h2hMarket.outcomes.find((o: any) => o.name === apiMatch.away_team);
-              const drawOutcome = h2hMarket.outcomes.find((o: any) => o.name.toLowerCase() === 'draw' || o.name === 'Draw' || o.name === 'Nul');
-              if (homeOutcome) baseOddsHome = homeOutcome.price;
-              if (awayOutcome) baseOddsAway = awayOutcome.price;
-              if (drawOutcome) baseOddsDraw = drawOutcome.price;
-            }
-
-            const totalsMarket = apiMatch.bookmakers[0].markets.find((m: any) => m.key === 'totals');
-            if (totalsMarket && Array.isArray(totalsMarket.outcomes)) {
-              const over25 = totalsMarket.outcomes.find((o: any) => o.name === 'Over' && o.point === 2.5);
-              const under25 = totalsMarket.outcomes.find((o: any) => o.name === 'Under' && o.point === 2.5);
-              if (over25) baseOddsOu25Yes = over25.price;
-              if (under25) baseOddsOu25No = under25.price;
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching from The Odds API:', err);
-      }
+    let blueprint: BlueprintMarket[];
+    if (Array.isArray(body.markets) && body.markets.length) {
+      blueprint = body.markets as BlueprintMarket[];
+    } else {
+      const parsed = eventId ? await getParsedOdds(eventId) : null;
+      blueprint = buildSessionBlueprint({ id: matchId, homeTeam: match.homeTeam, awayTeam: match.awayTeam }, parsed);
     }
 
     const createSession = db.transaction(() => {
-    // 0. Purger toute donnée existante de ce match (idempotent : permet de relancer le même match sans erreur)
+    // 0. Purge idempotente (relancer le même match ne plante pas)
     const oldMarkets = db.prepare('SELECT id FROM markets WHERE match_id = ?').all(matchId) as { id: string }[];
     for (const m of oldMarkets) {
       db.prepare('DELETE FROM outcomes WHERE market_id = ?').run(m.id);
@@ -615,13 +654,13 @@ export async function POST(req: NextRequest) {
     // 1. Désactiver tous les autres matchs
     db.prepare('UPDATE matches SET is_active = 0').run();
 
-    // 2. Insérer le nouveau match
+    // 2. Insérer le nouveau match (+ lien event de cotes odds-api.io)
     db.prepare(`
       INSERT INTO matches (
         id, home_team, away_team, home_score, away_score, status, starts_at,
         bets_closed_at, elapsed_time, possession_home, shots_on_target_home,
-        corners_home, cards_home, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        corners_home, cards_home, is_active, odds_event_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
     `).run(
       matchId,
       match.homeTeam,
@@ -635,77 +674,22 @@ export async function POST(req: NextRequest) {
       match.possessionHome ?? 50,
       match.shotsOnTargetHome ?? 0,
       match.cornersHome ?? 0,
-      match.cardsHome ?? 0
+      match.cardsHome ?? 0,
+      eventId ? String(eventId) : null
     );
 
     // 3. Insérer les réglages pour ce match
     db.prepare('INSERT OR IGNORE INTO game_settings (match_id, double_gains_active) VALUES (?, 0)').run(matchId);
 
-    // 4. Créer les marchés de paris par défaut
-    const markets = [
-      { id: `m-${matchId}-resultat`, type: 'final_result', title: 'RÉSULTAT DU MATCH' },
-      { id: `m-${matchId}-score`, type: 'exact_score', title: 'SCORE EXACT' },
-      { id: `m-${matchId}-buteurs`, type: 'first_scorer', title: 'PREMIER BUTEUR' },
-      { id: `m-${matchId}-corners`, type: 'corners_count', title: `NOMBRE DE CORNERS ${match.homeTeam.toUpperCase()}` },
-      { id: `m-${matchId}-res-ht`, type: 'halftime_result', title: 'RÉSULTAT À LA MI-TEMPS' },
-      { id: `m-${matchId}-score-ht`, type: 'halftime_score', title: 'SCORE À LA MI-TEMPS' },
-      { id: `m-${matchId}-btts`, type: 'btts', title: 'LES DEUX ÉQUIPES MARQUENT' },
-      { id: `m-${matchId}-ou25`, type: 'over_under_25', title: 'PLUS DE 2.5 BUTS DANS LE MATCH ?' },
-    ];
-
+    // 4. Créer les marchés + outcomes depuis le blueprint (cote réelle/défaut + provenance)
     const insM = db.prepare(`INSERT INTO markets (id, match_id, type, title, is_active, is_closed, resolved_outcome_id, is_flash, closes_at) VALUES (?, ?, ?, ?, 1, 0, NULL, 0, NULL)`);
-    for (const mkt of markets) {
+    const insO = db.prepare(`INSERT INTO outcomes (id, market_id, name, base_odds, current_odds, total_bet_amount, total_bets_count, odds_source) VALUES (?, ?, ?, ?, ?, 0, 0, ?)`);
+    for (const mkt of blueprint) {
       insM.run(mkt.id, matchId, mkt.type, mkt.title);
-    }
-
-    const outcomes = [
-      // Résultat Final
-      [`o-${matchId}-res-home`, `m-${matchId}-resultat`, match.homeTeam, baseOddsHome, baseOddsHome, 0, 0],
-      [`o-${matchId}-res-draw`, `m-${matchId}-resultat`, 'Nul', baseOddsDraw, baseOddsDraw, 0, 0],
-      [`o-${matchId}-res-away`, `m-${matchId}-resultat`, match.awayTeam, baseOddsAway, baseOddsAway, 0, 0],
-      
-      // Score Exact
-      [`o-${matchId}-se-10`, `m-${matchId}-score`, '1-0', 3.50, 3.50, 0, 0],
-      [`o-${matchId}-se-20`, `m-${matchId}-score`, '2-0', 6.00, 6.00, 0, 0],
-      [`o-${matchId}-se-21`, `m-${matchId}-score`, '2-1', 7.50, 7.50, 0, 0],
-      [`o-${matchId}-se-30`, `m-${matchId}-score`, '3-0', 10.0, 10.0, 0, 0],
-      [`o-${matchId}-se-01`, `m-${matchId}-score`, '0-1', 9.00, 9.00, 0, 0],
-      [`o-${matchId}-se-11`, `m-${matchId}-score`, '1-1', 5.50, 5.50, 0, 0],
-
-      // Premier Buteur
-      [`o-${matchId}-pb-vedette-1`, `m-${matchId}-buteurs`, `Buteur ${match.homeTeam} (Vedette)`, 3.80, 3.80, 0, 0],
-      [`o-${matchId}-pb-vedette-2`, `m-${matchId}-buteurs`, `Buteur ${match.awayTeam} (Vedette)`, 4.20, 4.20, 0, 0],
-      [`o-${matchId}-pb-autre`, `m-${matchId}-buteurs`, 'Autre Buteur', 2.80, 2.80, 0, 0],
-
-      // Corners
-      [`o-${matchId}-co-l5`, `m-${matchId}-corners`, 'Moins de 5', 2.20, 2.20, 0, 0],
-      [`o-${matchId}-co-57`, `m-${matchId}-corners`, 'Entre 5 et 7', 1.80, 1.80, 0, 0],
-      [`o-${matchId}-co-m7`, `m-${matchId}-corners`, 'Plus de 7', 3.10, 3.10, 0, 0],
-
-      // Résultat Mi-Temps
-      [`o-${matchId}-ht-res-home`, `m-${matchId}-res-ht`, match.homeTeam, Math.round((baseOddsHome * 1.3) * 100) / 100, Math.round((baseOddsHome * 1.3) * 100) / 100, 0, 0],
-      [`o-${matchId}-ht-res-draw`, `m-${matchId}-res-ht`, 'Nul', Math.round((baseOddsDraw * 0.7) * 100) / 100, Math.round((baseOddsDraw * 0.7) * 100) / 100, 0, 0],
-      [`o-${matchId}-ht-res-away`, `m-${matchId}-res-ht`, match.awayTeam, Math.round((baseOddsAway * 1.3) * 100) / 100, Math.round((baseOddsAway * 1.3) * 100) / 100, 0, 0],
-
-      // Score Mi-Temps
-      [`o-${matchId}-ht-se-00`, `m-${matchId}-score-ht`, '0-0', 2.30, 2.30, 0, 0],
-      [`o-${matchId}-ht-se-10`, `m-${matchId}-score-ht`, '1-0', 3.80, 3.80, 0, 0],
-      [`o-${matchId}-ht-se-01`, `m-${matchId}-score-ht`, '0-1', 4.80, 4.80, 0, 0],
-      [`o-${matchId}-ht-se-11`, `m-${matchId}-score-ht`, '1-1', 6.50, 6.50, 0, 0],
-      [`o-${matchId}-ht-se-autre`, `m-${matchId}-score-ht`, 'Autre Score', 5.00, 5.00, 0, 0],
-
-      // Les deux équipes marquent
-      [`o-${matchId}-btts-yes`, `m-${matchId}-btts`, 'Oui', 1.85, 1.85, 0, 0],
-      [`o-${matchId}-btts-no`, `m-${matchId}-btts`, 'Non', 1.90, 1.90, 0, 0],
-
-      // Plus de 2.5 Buts
-      [`o-${matchId}-ou25-yes`, `m-${matchId}-ou25`, 'Oui', baseOddsOu25Yes, baseOddsOu25Yes, 0, 0],
-      [`o-${matchId}-ou25-no`, `m-${matchId}-ou25`, 'Non', baseOddsOu25No, baseOddsOu25No, 0, 0],
-    ];
-
-    const insO = db.prepare(`INSERT INTO outcomes (id, market_id, name, base_odds, current_odds, total_bet_amount, total_bets_count) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-    for (const o of outcomes) {
-      insO.run(...o);
+      for (const oc of mkt.outcomes) {
+        const oddVal = Number(oc.baseOdds) > 1 ? Math.round(Number(oc.baseOdds) * 100) / 100 : 1.10;
+        insO.run(oc.id, mkt.id, oc.name, oddVal, oddVal, oc.oddsSource || 'default');
+      }
     }
 
     // Récupérer le nouvel état complet

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import db from '@/lib/db';
+import db, { suspendImpossibleOutcomes } from '@/lib/db';
 import { broadcast } from '@/lib/sse-bus';
 import { triggerWebhooks } from '@/lib/webhooks';
+import { getLiveEvent } from '@/lib/odds-provider';
 
 // Ensure matches table has last_sync_at column
 try {
@@ -131,16 +132,39 @@ export async function GET() {
       return NextResponse.json({ success: true, message: 'Aucun match actif' });
     }
 
-    if (match.status !== 'live') {
+    if (match.status !== 'live' && match.status !== 'half_time') {
       return NextResponse.json({ success: true, message: `Match non en direct (${match.status})` });
     }
 
-    // 2. Rate limiting of sync updates (max once every 14s)
     const now = Date.now();
+    const isApiFootball = typeof match.id === 'string' && match.id.startsWith('apifs-');
+
+    // Halftime skip logic for API-Football (wait 14m before calling API again)
+    if (isApiFootball && match.status === 'half_time') {
+      const htEvent = db.prepare("SELECT created_at FROM game_events WHERE match_id = ? AND type = 'half_time' ORDER BY created_at DESC LIMIT 1").get(match.id) as { created_at: string } | undefined;
+      if (htEvent) {
+        const htTime = new Date(htEvent.created_at + ' Z').getTime();
+        const elapsedHtMs = now - htTime;
+        if (elapsedHtMs < 14 * 60 * 1000) {
+          return NextResponse.json({ success: true, message: 'Mi-temps en cours (< 14 min), sync externe ignorée', match });
+        }
+      }
+    }
+
+    // Define dynamic sync intervals to respect rate limits
+    let syncInterval = 14000; // default for simulator and odds-api
+    if (isApiFootball) {
+      if (match.status === 'live') {
+        syncInterval = 80000; // 80s
+      } else if (match.status === 'half_time') {
+        syncInterval = 300000; // 5 min
+      }
+    }
+
     if (match.last_sync_at) {
       const lastSync = new Date(match.last_sync_at).getTime();
-      if (now - lastSync < 14000) {
-        return NextResponse.json({ success: true, message: 'Sync trop rapide, ignorée', match });
+      if (now - lastSync < syncInterval) {
+        return NextResponse.json({ success: true, message: `Sync trop rapide, ignorée (requis: ${syncInterval/1000}s)`, match });
       }
     }
 
@@ -149,7 +173,63 @@ export async function GET() {
 
     const apiKey = process.env.FOOTBALL_API_KEY;
 
-    // 3. API-Football Integration Path
+    // 3a. odds-api.io Live Path (source principale : score + statut réels, liés par event id)
+    const oaiEventId = match.odds_event_id || (typeof match.id === 'string' && match.id.startsWith('oai-') ? match.id.replace('oai-', '') : null);
+    if (oaiEventId) {
+      const ev = await getLiveEvent(oaiEventId);
+      if (!ev) {
+        // Pas de données live : on NE simule PAS un vrai match (évite de faux buts aléatoires).
+        return NextResponse.json({ success: true, message: 'oai: pas de données live', match });
+      }
+
+      const homeScore = ev.scores?.home ?? match.home_score;
+      const awayScore = ev.scores?.away ?? match.away_score;
+
+      const raw = (ev.status || '').toLowerCase();
+      let status: string = match.status;
+      if (['finished', 'ended', 'ft', 'aet', 'pen', 'closed'].includes(raw)) status = 'finished';
+      else if (['ht', 'halftime', 'half_time', 'pause'].includes(raw)) status = 'half_time';
+      else if (['live', 'inplay', 'playing', '1h', '2h', 'et'].includes(raw)) status = 'live';
+      // raw === 'pending' / inconnu → on conserve le statut courant (l'admin peut le piloter).
+
+      // But marqué : un score a augmenté.
+      if (homeScore > match.home_score || awayScore > match.away_score) {
+        const scoringTeam = homeScore > match.home_score ? 'home' : 'away';
+        const teamName = scoringTeam === 'home' ? match.home_team : match.away_team;
+        const newScore = `${homeScore}-${awayScore}`;
+        const eventTitle = `BUT POUR ${String(teamName).toUpperCase()} ! ⚽`;
+        const eventSubtitle = `${teamName} marque ! (${newScore})`;
+        db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle, meta) VALUES (?, ?, 'goal', ?, ?, ?)`).run(
+          'ge-goal-' + now, match.id, eventTitle, eventSubtitle, JSON.stringify({ team: scoringTeam, score: newScore }),
+        );
+        triggerWebhooks('match.goal', { team: scoringTeam, score: newScore });
+        broadcast('game_event', { type: 'goal', title: eventTitle, subtitle: eventSubtitle, meta: { team: scoringTeam } });
+      }
+
+      // Transition de statut → résolution des marchés.
+      if (status !== match.status) {
+        const htHome = ev.scores?.periods?.p1?.home ?? homeScore;
+        const htAway = ev.scores?.periods?.p1?.away ?? awayScore;
+        if (status === 'half_time') {
+          db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'half_time', ?, ?)`).run('ge-ht-' + now, match.id, 'MI-TEMPS ! ⏸️', 'Fin de la première période.');
+          resolveHalftimeMarkets(match.id, match.home_team, match.away_team, htHome, htAway);
+          triggerWebhooks('match.status_change', { status: 'half_time' });
+          broadcast('game_event', { type: 'half_time', title: 'MI-TEMPS ! ⏸️', subtitle: 'Fin de la première période.' });
+        } else if (status === 'finished') {
+          db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'finished', ?, ?)`).run('ge-ft-' + now, match.id, 'FIN DU MATCH ! 🏁', `Score final : ${match.home_team} ${homeScore} - ${awayScore} ${match.away_team}`);
+          resolveHalftimeMarkets(match.id, match.home_team, match.away_team, htHome, htAway);
+          resolveFulltimeMarkets(match.id, match.home_team, match.away_team, homeScore, awayScore, match.corners_home);
+          triggerWebhooks('match.finished', { id: match.id, home_score: homeScore, away_score: awayScore });
+          broadcast('game_event', { type: 'finished', title: 'FIN DU MATCH ! 🏁', subtitle: `Score final : ${match.home_team} ${homeScore} - ${awayScore} ${match.away_team}` });
+        }
+      }
+
+      db.prepare('UPDATE matches SET home_score = ?, away_score = ?, status = ? WHERE id = ?').run(homeScore, awayScore, status, match.id);
+      suspendImpossibleOutcomes(match.id, homeScore, awayScore);
+      const updatedMatch = db.prepare('SELECT * FROM matches WHERE id = ?').get(match.id);
+      broadcast('match_update', updatedMatch);
+      return NextResponse.json({ success: true, fromOddsApi: true, match: updatedMatch });
+    }    // 3. API-Football Integration Path
     if (apiKey && match.id.startsWith('apifs-')) {
       const fixtureId = match.id.replace('apifs-', '');
       const res = await fetch(`https://v3.football.api-sports.io/fixtures?id=${fixtureId}`, {
@@ -170,33 +250,79 @@ export async function GET() {
         else if (shortStatus === 'HT') status = 'half_time';
         else if (['FT', 'AET', 'PEN'].includes(shortStatus)) status = 'finished';
 
-        // Parse statistics
+        // Parse statistics using the second endpoint
         let possessionHome = 50;
+        let shotsHome = 0;
+        let shotsAway = 0;
         let shotsOnTargetHome = 0;
+        let shotsOnTargetAway = 0;
         let cornersHome = 0;
+        let cornersAway = 0;
         let cardsHome = 0;
+        let cardsAway = 0;
+        let foulsHome = 0;
+        let foulsAway = 0;
+        let passesAccuracyHome = 80;
+        let passesAccuracyAway = 80;
 
-        if (apiFixture.statistics && Array.isArray(apiFixture.statistics)) {
-          // Find stats for home team
-          const homeStats = apiFixture.statistics.find(
-            (s: any) => s.team.name === match.home_team || s.team.id === apiFixture.teams.home.id
-          );
-          if (homeStats && Array.isArray(homeStats.statistics)) {
-            const findVal = (type: string) => homeStats.statistics.find((st: any) => st.type === type)?.value;
-            
-            const posVal = findVal('Ball Possession');
-            if (posVal) possessionHome = parseInt(String(posVal).replace('%', '')) || 50;
+        try {
+          const statsRes = await fetch(`https://v3.football.api-sports.io/fixtures/statistics?fixture=${fixtureId}`, {
+            headers: {
+              'x-apisports-key': apiKey
+            }
+          }).then(r => r.json());
 
-            const shotsVal = findVal('Shots on Goal');
-            if (shotsVal) shotsOnTargetHome = parseInt(String(shotsVal)) || 0;
+          if (statsRes.response && Array.isArray(statsRes.response)) {
+            const homeStats = statsRes.response.find(
+              (s: any) => s.team.id === apiFixture.teams.home.id || s.team.name === match.home_team
+            );
+            const awayStats = statsRes.response.find(
+              (s: any) => s.team.id === apiFixture.teams.away.id || s.team.name === match.away_team
+            );
 
-            const cornersVal = findVal('Corner Kicks');
-            if (cornersVal) cornersHome = parseInt(String(cornersVal)) || 0;
+            const extractVal = (teamStats: any, type: string) => {
+              if (!teamStats || !Array.isArray(teamStats.statistics)) return null;
+              return teamStats.statistics.find((st: any) => st.type === type)?.value;
+            };
 
-            const yellowCards = parseInt(String(findVal('Yellow Cards') || 0)) || 0;
-            const redCards = parseInt(String(findVal('Red Cards') || 0)) || 0;
-            cardsHome = yellowCards + redCards;
+            if (homeStats) {
+              const posVal = extractVal(homeStats, 'Ball Possession');
+              if (posVal) possessionHome = parseInt(String(posVal).replace('%', '')) || 50;
+
+              shotsHome = parseInt(String(extractVal(homeStats, 'Total Shots') || 0)) || 0;
+              shotsOnTargetHome = parseInt(String(extractVal(homeStats, 'Shots on Goal') || 0)) || 0;
+              cornersHome = parseInt(String(extractVal(homeStats, 'Corner Kicks') || 0)) || 0;
+              
+              const yellow = parseInt(String(extractVal(homeStats, 'Yellow Cards') || 0)) || 0;
+              const red = parseInt(String(extractVal(homeStats, 'Red Cards') || 0)) || 0;
+              cardsHome = yellow + red;
+
+              foulsHome = parseInt(String(extractVal(homeStats, 'Fouls') || 0)) || 0;
+
+              const passesPct = extractVal(homeStats, 'Passes %');
+              if (passesPct) passesAccuracyHome = parseInt(String(passesPct).replace('%', '')) || 80;
+            }
+
+            if (awayStats) {
+              const posVal = extractVal(awayStats, 'Ball Possession');
+              if (posVal && !homeStats) possessionHome = 100 - (parseInt(String(posVal).replace('%', '')) || 50);
+
+              shotsAway = parseInt(String(extractVal(awayStats, 'Total Shots') || 0)) || 0;
+              shotsOnTargetAway = parseInt(String(extractVal(awayStats, 'Shots on Goal') || 0)) || 0;
+              cornersAway = parseInt(String(extractVal(awayStats, 'Corner Kicks') || 0)) || 0;
+              
+              const yellow = parseInt(String(extractVal(awayStats, 'Yellow Cards') || 0)) || 0;
+              const red = parseInt(String(extractVal(awayStats, 'Red Cards') || 0)) || 0;
+              cardsAway = yellow + red;
+
+              foulsAway = parseInt(String(extractVal(awayStats, 'Fouls') || 0)) || 0;
+
+              const passesPct = extractVal(awayStats, 'Passes %');
+              if (passesPct) passesAccuracyAway = parseInt(String(passesPct).replace('%', '')) || 80;
+            }
           }
+        } catch (err) {
+          console.error('[Sync API-Football] Error fetching statistics:', err);
         }
 
         // Trigger goal celebration overlay if scores changed
@@ -274,10 +400,28 @@ export async function GET() {
         // Save updated data
         db.prepare(`
           UPDATE matches 
-          SET elapsed_time = ?, home_score = ?, away_score = ?, corners_home = ?, 
-              shots_on_target_home = ?, cards_home = ?, possession_home = ?, status = ?
+          SET elapsed_time = ?, home_score = ?, away_score = ?, 
+              corners_home = ?, corners_away = ?,
+              shots_home = ?, shots_away = ?,
+              shots_on_target_home = ?, shots_on_target_away = ?,
+              cards_home = ?, cards_away = ?,
+              possession_home = ?,
+              fouls_home = ?, fouls_away = ?,
+              passes_accuracy_home = ?, passes_accuracy_away = ?,
+              status = ?
           WHERE id = ?
-        `).run(elapsedTime, homeScore, awayScore, cornersHome, shotsOnTargetHome, cardsHome, possessionHome, status, match.id);
+        `).run(
+          elapsedTime, homeScore, awayScore, 
+          cornersHome, cornersAway,
+          shotsHome, shotsAway,
+          shotsOnTargetHome, shotsOnTargetAway,
+          cardsHome, cardsAway,
+          possessionHome,
+          foulsHome, foulsAway,
+          passesAccuracyHome, passesAccuracyAway,
+          status, match.id
+        );
+        suspendImpossibleOutcomes(match.id, homeScore, awayScore);
 
         const updatedMatch = db.prepare('SELECT * FROM matches WHERE id = ?').get(match.id);
         broadcast('match_update', updatedMatch);
@@ -285,7 +429,6 @@ export async function GET() {
         return NextResponse.json({ success: true, fromApi: true, match: updatedMatch });
       }
     }
-
     // 4. Fallback: Local Simulator Path
     const newElapsedTime = match.elapsed_time + 1;
     let newStatus = match.status;
@@ -389,6 +532,7 @@ export async function GET() {
           shots_on_target_home = ?, cards_home = ?, possession_home = ?
       WHERE id = ?
     `).run(newElapsedTime, homeScore, awayScore, cornersHome, shotsOnTargetHome, cardsHome, possessionHome, match.id);
+    suspendImpossibleOutcomes(match.id, homeScore, awayScore);
 
     const updatedMatch = db.prepare('SELECT * FROM matches WHERE id = ?').get(match.id);
     broadcast('match_update', updatedMatch);

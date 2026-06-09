@@ -176,6 +176,28 @@ try {
   // Column already exists, ignore
 }
 
+// Lien vers le fournisseur de cotes/scores (odds-api.io) et, en option, vers API-Football
+// pour l'enrichissement des stats live.
+try { db.exec('ALTER TABLE matches ADD COLUMN odds_event_id TEXT;'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE matches ADD COLUMN apifs_id TEXT;'); } catch { /* exists */ }
+
+// Provenance de la cote de chaque outcome : 'api' | 'default' | 'manual' (badge admin).
+try { db.exec("ALTER TABLE outcomes ADD COLUMN odds_source TEXT DEFAULT 'default';"); } catch { /* exists */ }
+
+// Présence : dernière activité d'un joueur (heartbeat) pour le comptage des connectés et le timeout.
+try { db.exec('ALTER TABLE players ADD COLUMN last_seen TEXT;'); } catch { /* exists */ }
+
+// Nouvelles colonnes de statistiques détaillées pour les deux équipes
+try { db.exec('ALTER TABLE matches ADD COLUMN shots_home INTEGER DEFAULT 0;'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE matches ADD COLUMN shots_away INTEGER DEFAULT 0;'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE matches ADD COLUMN shots_on_target_away INTEGER DEFAULT 0;'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE matches ADD COLUMN corners_away INTEGER DEFAULT 0;'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE matches ADD COLUMN cards_away INTEGER DEFAULT 0;'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE matches ADD COLUMN fouls_home INTEGER DEFAULT 0;'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE matches ADD COLUMN fouls_away INTEGER DEFAULT 0;'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE matches ADD COLUMN passes_accuracy_home INTEGER DEFAULT 80;'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE matches ADD COLUMN passes_accuracy_away INTEGER DEFAULT 80;'); } catch { /* exists */ }
+
 // Seed bots (joueurs fictifs du classement) si la table est vide.
 // NB : aucun match de démo n'est créé — l'hôte lance lui-même la session depuis /admin.
 const botCount = db.prepare('SELECT COUNT(*) as count FROM players WHERE is_bot = 1').get() as { count: number };
@@ -224,6 +246,47 @@ if (rewardCount.count === 0) {
   insReward.run('r-cocktail', 'Cocktail Création', 'Le cocktail signature du barman offert.', 3500, '🍹');
   insReward.run('r-burger', 'Burger Toiles Noires', 'Le burger classique avec frites.', 5000, '🍔');
   insReward.run('r-cap', 'Casquette France Toiles', 'Une casquette collector aux couleurs du bar.', 4000, '🧢');
+}
+
+export function suspendImpossibleOutcomes(matchId: string, homeScore: number, awayScore: number) {
+  // 1. Get all markets for this match
+  const markets = db.prepare('SELECT id, type FROM markets WHERE match_id = ?').all(matchId) as { id: string; type: string }[];
+  
+  for (const market of markets) {
+    const outcomes = db.prepare('SELECT id, name FROM outcomes WHERE market_id = ?').all(market.id) as { id: string; name: string }[];
+    
+    for (const outcome of outcomes) {
+      let isImpossible = false;
+      
+      if (market.type === 'exact_score' || market.type === 'halftime_score') {
+        const parts = outcome.name.split('-');
+        if (parts.length === 2) {
+          const h = parseInt(parts[0], 10);
+          const a = parseInt(parts[1], 10);
+          if (!isNaN(h) && !isNaN(a)) {
+            if (h < homeScore || a < awayScore) {
+              isImpossible = true;
+            }
+          }
+        }
+      } 
+      else if (market.type === 'over_under_25') {
+        const totalGoals = homeScore + awayScore;
+        if (totalGoals > 2.5 && outcome.name === 'Non') {
+          isImpossible = true;
+        }
+      } 
+      else if (market.type === 'btts') {
+        if (homeScore > 0 && awayScore > 0 && outcome.name === 'Non') {
+          isImpossible = true;
+        }
+      }
+      
+      if (isImpossible) {
+        db.prepare('UPDATE outcomes SET current_odds = 0 WHERE id = ?').run(outcome.id);
+      }
+    }
+  }
 }
 
 export default db;

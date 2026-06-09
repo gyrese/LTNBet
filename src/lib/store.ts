@@ -32,6 +32,15 @@ export interface Match {
   cardsHome: number;
   finishedAt?: string | null;
   sessionClosed?: boolean;
+  shotsHome: number;
+  shotsAway: number;
+  shotsOnTargetAway: number;
+  cornersAway: number;
+  cardsAway: number;
+  foulsHome: number;
+  foulsAway: number;
+  passesAccuracyHome: number;
+  passesAccuracyAway: number;
 }
 
 export interface Outcome {
@@ -136,6 +145,7 @@ interface GameStore {
   triggerGoal: (team: 'home' | 'away', scorer?: string) => void;
   endMatch: () => void;
   closeSession: () => void;
+  deleteSession: () => Promise<void>;
   resetAll: () => Promise<void>;
 
   markets: Market[];
@@ -191,6 +201,15 @@ const matchFromDb = (r: any): Match => ({
   cardsHome: r.cards_home,
   finishedAt: r.finished_at ?? null,
   sessionClosed: Boolean(r.session_closed),
+  shotsHome: r.shots_home ?? 0,
+  shotsAway: r.shots_away ?? 0,
+  shotsOnTargetAway: r.shots_on_target_away ?? 0,
+  cornersAway: r.corners_away ?? 0,
+  cardsAway: r.cards_away ?? 0,
+  foulsHome: r.fouls_home ?? 0,
+  foulsAway: r.fouls_away ?? 0,
+  passesAccuracyHome: r.passes_accuracy_home ?? 80,
+  passesAccuracyAway: r.passes_accuracy_away ?? 80,
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -291,6 +310,60 @@ async function dbPost(body: Record<string, unknown>) {
   return r.json();
 }
 
+// ─── Présence : heartbeat + timeout d'inactivité ───────────────────────────────
+
+const HEARTBEAT_MS = 20_000;
+const INACTIVITY_LIMIT_MS = 30 * 60_000; // 30 min sans interaction → déconnexion
+let presenceStarted = false;
+let realtimeStarted = false;
+let lastActivity = Date.now();
+
+function clearLocalSession() {
+  if (typeof window === 'undefined') return;
+  ['ltn_user_profile', 'ltn_user_bets', 'ltn_user_badges', 'ltn_user_admin'].forEach((k) => localStorage.removeItem(k));
+}
+
+function redirectToJoin() {
+  if (typeof window === 'undefined') return;
+  const path = window.location.pathname;
+  if (path !== '/admin' && path !== '/screen') window.location.href = '/join';
+}
+
+function sendHeartbeat(userId: string) {
+  fetch('/api/presence', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId }),
+  }).catch(() => {});
+}
+
+function startPresence(get: () => GameStore) {
+  if (presenceStarted || typeof window === 'undefined') return;
+  presenceStarted = true;
+
+  const bump = () => { lastActivity = Date.now(); };
+  ['mousedown', 'keydown', 'touchstart', 'scroll', 'visibilitychange'].forEach((ev) =>
+    window.addEventListener(ev, bump, { passive: true }),
+  );
+
+  setInterval(() => {
+    const user = get().currentUser;
+    if (!user) return;
+    // Timeout d'inactivité → déconnexion automatique
+    if (Date.now() - lastActivity > INACTIVITY_LIMIT_MS) {
+      get().logoutUser();
+      redirectToJoin();
+      return;
+    }
+    // On ne signale la présence que si l'onglet est visible (les onglets fantômes passent hors-ligne)
+    if (typeof document !== 'undefined' && document.hidden) return;
+    sendHeartbeat(user.id);
+  }, HEARTBEAT_MS);
+
+  const user = get().currentUser;
+  if (user) sendHeartbeat(user.id);
+}
+
 // ─── INITIAL STATE ───────────────────────────────────────────────────────────
 
 // Placeholder « aucun match » : affiché tant que l'hôte n'a pas lancé de session.
@@ -300,6 +373,8 @@ const NO_MATCH: Match = {
   startsAt: '', betsClosedAt: '',
   elapsedTime: 0, possessionHome: 50, shotsOnTargetHome: 0, cornersHome: 0, cardsHome: 0,
   finishedAt: null, sessionClosed: false,
+  shotsHome: 0, shotsAway: 0, shotsOnTargetAway: 0, cornersAway: 0, cardsAway: 0,
+  foulsHome: 0, foulsAway: 0, passesAccuracyHome: 80, passesAccuracyAway: 80,
 };
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -359,6 +434,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   _subscribeRealtime: () => {
     if (typeof window === 'undefined') return;
+    // Évite d'empiler plusieurs EventSource/listeners si init est rappelé (ex. après création de session).
+    if (realtimeStarted) { startPresence(get); return; }
+    realtimeStarted = true;
     const es = new EventSource('/api/events');
 
     es.addEventListener('match_update', (e) => {
@@ -426,10 +504,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     });
 
-    // Session clôturée (manuelle ou auto 30 min) : plus de match actif, retour à l'écran d'attente
+    // Session clôturée (manuelle ou auto 30 min) : plus de match actif, retour à l'écran d'attente + déconnexion globale
     es.addEventListener('session_closed', () => {
-      set({ match: NO_MATCH, markets: [], hasActiveMatch: false });
+      set({ match: NO_MATCH, markets: [], hasActiveMatch: false, currentUser: null });
+      clearLocalSession();
+      redirectToJoin();
     });
+
+    // Déconnexion forcée : kick d'un joueur précis (userId) ou de tout le monde (all).
+    es.addEventListener('force_logout', (e) => {
+      let data: { userId?: string; all?: boolean } = {};
+      try { data = JSON.parse(e.data || '{}'); } catch { /* ignore */ }
+      const cu = get().currentUser;
+      if (data.all || (cu && data.userId === cu.id)) {
+        clearLocalSession();
+        set({ currentUser: null, myBets: [], myBadges: [], isUserAdmin: false });
+        redirectToJoin();
+      }
+    });
+
+    // Démarre le heartbeat de présence + le timeout d'inactivité.
+    startPresence(get);
   },
 
   // ── Auth ───────────────────────────────────────────────────────────────────
@@ -465,6 +560,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       homeScore: 'home_score', awayScore: 'away_score', status: 'status',
       elapsedTime: 'elapsed_time', possessionHome: 'possession_home',
       shotsOnTargetHome: 'shots_on_target_home', cornersHome: 'corners_home', cardsHome: 'cards_home',
+      shotsHome: 'shots_home', shotsAway: 'shots_away', shotsOnTargetAway: 'shots_on_target_away',
+      cornersAway: 'corners_away', cardsAway: 'cards_away', foulsHome: 'fouls_home', foulsAway: 'fouls_away',
+      passesAccuracyHome: 'passes_accuracy_home', passesAccuracyAway: 'passes_accuracy_away',
     };
     const dbStats: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(stats)) if (mapping[k]) dbStats[mapping[k]] = v;
@@ -499,6 +597,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Fermer la session : archive JSON + clôture définitive
   closeSession: () => {
     dbPost({ op: 'close_session' });
+    set({ match: NO_MATCH, markets: [], hasActiveMatch: false });
+  },
+
+  // Supprimer la session : efface complètement le match et ses données
+  deleteSession: async () => {
+    await dbPost({ op: 'delete_session' });
     set({ match: NO_MATCH, markets: [], hasActiveMatch: false });
   },
 

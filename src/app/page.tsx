@@ -85,6 +85,12 @@ export default function HomePage() {
     setBetAmount(Math.min(currentUser.toilesCoins, 100));
   };
 
+  const clearSelection = () => {
+    setSelectedMarket(null);
+    setSelectedOutcome(null);
+    setBetStatusMsg(null);
+  };
+
   const handlePlaceBet = async () => {
     if (!selectedMarket || !selectedOutcome || submitting) return;
     setSubmitting(true);
@@ -92,11 +98,7 @@ export default function HomePage() {
     setSubmitting(false);
     if (res.success) {
       setBetStatusMsg({ type: 'success', text: 'Pari validé avec succès !' });
-      setTimeout(() => {
-        setSelectedMarket(null);
-        setSelectedOutcome(null);
-        setBetStatusMsg(null);
-      }, 2000);
+      setTimeout(clearSelection, 2000);
     } else {
       setBetStatusMsg({ type: 'error', text: res.error || 'Erreur lors de la validation.' });
     }
@@ -273,22 +275,28 @@ export default function HomePage() {
                       <button
                         key={outcome.id}
                         onClick={() => handleOutcomeClick(market, outcome)}
-                        disabled={!bettingOpen || market.isClosed || !market.isActive}
+                        disabled={!bettingOpen || market.isClosed || !market.isActive || outcome.currentOdds === 0}
                         className={`group relative overflow-hidden rounded-xl p-3.5 flex flex-col gap-2 text-left transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
                           isSelected
                             ? 'bg-secondary-container/15 border border-primary/50 glow-accent'
                             : 'bg-white/[0.03] border border-white/8 hover:bg-white/[0.06] hover:border-white/15 hover:-translate-y-0.5'
-                        } ${(market.isClosed || !bettingOpen) ? 'opacity-40 cursor-not-allowed hover:translate-y-0' : ''}`}
+                        } ${(market.isClosed || !bettingOpen || outcome.currentOdds === 0) ? 'opacity-30 cursor-not-allowed hover:translate-y-0' : ''}`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className={`font-body-md text-[14px] leading-tight ${isSelected ? 'text-white font-semibold' : 'text-on-surface'}`}>
+                          <span className={`font-body-md text-[14px] leading-tight ${isSelected ? 'text-white font-semibold' : 'text-on-surface'} ${outcome.currentOdds === 0 ? 'line-through text-on-surface-variant/40' : ''}`}>
                             {outcome.name}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className={`font-data-mono text-[16px] font-bold tabular ${isSelected ? 'text-primary' : 'text-tertiary'}`}>
-                            {displayOdds.toFixed(2)}
-                          </span>
+                          {outcome.currentOdds === 0 ? (
+                            <span className="font-label-caps text-[10px] text-error/80 font-bold tracking-wider">
+                              Suspendu
+                            </span>
+                          ) : (
+                            <span className={`font-data-mono text-[16px] font-bold tabular ${isSelected ? 'text-primary' : 'text-tertiary'}`}>
+                              {displayOdds.toFixed(2)}
+                            </span>
+                          )}
                           <span className="font-data-mono text-[9px] text-on-surface-variant/45 tabular">
                             {share}%
                           </span>
@@ -311,8 +319,8 @@ export default function HomePage() {
           {/* RIGHT: bet slip + stats */}
           <div className="lg:col-span-4 flex flex-col gap-5 lg:sticky lg:top-24">
 
-            {/* Bet slip */}
-            <section className="glass-strong rounded-2xl p-5 md:p-6 flex flex-col relative overflow-hidden">
+            {/* Bet slip — desktop only (mobile uses the bottom sheet) */}
+            <section className="glass-strong rounded-2xl p-5 md:p-6 hidden lg:flex flex-col relative overflow-hidden">
               <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
                 <h2 className="font-label-caps text-label-caps text-on-surface flex items-center gap-2 tracking-widest">
                   <span className="material-symbols-outlined text-[18px] text-primary">receipt_long</span>
@@ -335,74 +343,17 @@ export default function HomePage() {
                     transition={{ duration: 0.25 }}
                     className="space-y-5"
                   >
-                    <div className="flex justify-between items-start gap-3 bg-white/[0.03] rounded-xl p-3 border border-white/8">
-                      <div>
-                        <span className="block font-body-md text-white font-semibold text-[15px] leading-tight">
-                          {selectedOutcome.name}
-                        </span>
-                        <span className="block font-label-caps text-[9px] text-on-surface-variant mt-1 tracking-wider">
-                          {selectedMarket.title}
-                        </span>
-                      </div>
-                      <span className="font-data-mono text-tertiary font-bold bg-tertiary/10 px-2.5 py-1 rounded-lg border border-tertiary/25 tabular shrink-0">
-                        {(selectedOutcome.currentOdds * (doubleGainsActive ? 2 : 1)).toFixed(2)}
-                      </span>
-                    </div>
-
-                    {/* Mise */}
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <label className="font-label-caps text-[10px] text-on-surface-variant tracking-wider">
-                          MONTANT DE LA MISE
-                        </label>
-                        <span className="font-data-mono text-primary font-bold tabular">{betAmount} TC</span>
-                      </div>
-                      <input
-                        type="range"
-                        min={10}
-                        max={Math.max(10, Math.min(currentUser.toilesCoins, 500))}
-                        step={10}
-                        value={betAmount}
-                        onChange={(e) => setBetAmount(Number(e.target.value))}
-                        className="w-full h-1.5 bg-white/15 rounded-lg appearance-none cursor-pointer focus:outline-none"
-                      />
-                      <div className="flex justify-between gap-1.5">
-                        {[10, 50, 100, 250].map((amt) => (
-                          <button
-                            key={amt}
-                            onClick={() => setBetAmount(Math.min(currentUser.toilesCoins, amt))}
-                            disabled={currentUser.toilesCoins < amt}
-                            className={`flex-1 py-1.5 rounded-lg font-data-mono text-[11px] text-center border transition-all cursor-pointer tabular ${
-                              betAmount === amt
-                                ? 'bg-secondary-container/20 border-primary/50 text-primary'
-                                : 'bg-white/[0.03] border-white/10 text-on-surface-variant/70 hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed'
-                            }`}
-                          >
-                            {amt}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Gain potentiel */}
-                    <div className="flex justify-between items-center bg-gradient-to-r from-tertiary/12 to-transparent p-4 rounded-xl border border-tertiary/20">
-                      <span className="font-label-caps text-[10px] text-on-surface tracking-wider">GAIN POTENTIEL</span>
-                      <span className="font-score-display text-[22px] text-tertiary text-glow tabular">
-                        {potentialPayout.toLocaleString()}
-                        <span className="text-[12px] ml-1 text-tertiary/70">TC</span>
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={handlePlaceBet}
-                      disabled={submitting}
-                      className="btn-primary w-full font-headline-lg-mobile text-[17px] py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">
-                        {submitting ? 'progress_activity' : 'bolt'}
-                      </span>
-                      {submitting ? 'Validation…' : 'Valider mon pari'}
-                    </button>
+                    <BetSlipBody
+                      selectedMarket={selectedMarket}
+                      selectedOutcome={selectedOutcome}
+                      betAmount={betAmount}
+                      setBetAmount={setBetAmount}
+                      maxCoins={currentUser.toilesCoins}
+                      doubleGainsActive={doubleGainsActive}
+                      potentialPayout={potentialPayout}
+                      submitting={submitting}
+                      onPlaceBet={handlePlaceBet}
+                    />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -459,6 +410,174 @@ export default function HomePage() {
           </div>
         </div>
       </main>
+
+      {/* ============ MOBILE BET SLIP — BOTTOM SHEET ============ */}
+      <AnimatePresence>
+        {selectedOutcome && selectedMarket && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="sheet-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={clearSelection}
+              className="lg:hidden fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
+            />
+
+            {/* Sheet */}
+            <motion.div
+              key="sheet"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 360, damping: 36 }}
+              className="lg:hidden fixed inset-x-0 bottom-0 z-[61] glass-strong rounded-t-3xl border-t border-white/10 shadow-[0_-20px_40px_-20px_rgba(0,0,0,0.9)] px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] max-h-[88vh] overflow-y-auto"
+            >
+              {/* Drag handle */}
+              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-white/20" />
+
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+                <h2 className="font-label-caps text-label-caps text-on-surface flex items-center gap-2 tracking-widest">
+                  <span className="material-symbols-outlined text-[18px] text-primary">receipt_long</span>
+                  MON PARI
+                </h2>
+                <button
+                  onClick={clearSelection}
+                  aria-label="Fermer"
+                  className="w-8 h-8 rounded-full bg-white/[0.06] border border-white/10 flex items-center justify-center text-on-surface-variant hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+
+              <BetSlipBody
+                selectedMarket={selectedMarket}
+                selectedOutcome={selectedOutcome}
+                betAmount={betAmount}
+                setBetAmount={setBetAmount}
+                maxCoins={currentUser.toilesCoins}
+                doubleGainsActive={doubleGainsActive}
+                potentialPayout={potentialPayout}
+                submitting={submitting}
+                onPlaceBet={handlePlaceBet}
+              />
+
+              {betStatusMsg && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`mt-4 p-3 rounded-xl text-center font-data-mono text-[12px] border ${
+                    betStatusMsg.type === 'success'
+                      ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/25'
+                      : 'bg-error/12 text-error border-error/25'
+                  }`}
+                >
+                  {betStatusMsg.text}
+                </motion.div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function BetSlipBody({
+  selectedMarket,
+  selectedOutcome,
+  betAmount,
+  setBetAmount,
+  maxCoins,
+  doubleGainsActive,
+  potentialPayout,
+  submitting,
+  onPlaceBet,
+}: {
+  selectedMarket: Market;
+  selectedOutcome: Outcome;
+  betAmount: number;
+  setBetAmount: (n: number) => void;
+  maxCoins: number;
+  doubleGainsActive: boolean;
+  potentialPayout: number;
+  submitting: boolean;
+  onPlaceBet: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      {/* Pari sélectionné + cote */}
+      <div className="flex justify-between items-start gap-3 bg-white/[0.03] rounded-xl p-3 border border-white/8">
+        <div>
+          <span className="block font-body-md text-white font-semibold text-[15px] leading-tight">
+            {selectedOutcome.name}
+          </span>
+          <span className="block font-label-caps text-[9px] text-on-surface-variant mt-1 tracking-wider">
+            {selectedMarket.title}
+          </span>
+        </div>
+        <span className="font-data-mono text-tertiary font-bold bg-tertiary/10 px-2.5 py-1 rounded-lg border border-tertiary/25 tabular shrink-0">
+          {(selectedOutcome.currentOdds * (doubleGainsActive ? 2 : 1)).toFixed(2)}
+        </span>
+      </div>
+
+      {/* Mise */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <label className="font-label-caps text-[10px] text-on-surface-variant tracking-wider">
+            MONTANT DE LA MISE
+          </label>
+          <span className="font-data-mono text-primary font-bold tabular">{betAmount} TC</span>
+        </div>
+        <input
+          type="range"
+          min={10}
+          max={Math.max(10, Math.min(maxCoins, 500))}
+          step={10}
+          value={betAmount}
+          onChange={(e) => setBetAmount(Number(e.target.value))}
+          className="w-full h-1.5 bg-white/15 rounded-lg appearance-none cursor-pointer focus:outline-none"
+        />
+        <div className="flex justify-between gap-1.5">
+          {[10, 50, 100, 250].map((amt) => (
+            <button
+              key={amt}
+              onClick={() => setBetAmount(Math.min(maxCoins, amt))}
+              disabled={maxCoins < amt}
+              className={`flex-1 py-1.5 rounded-lg font-data-mono text-[11px] text-center border transition-all cursor-pointer tabular ${
+                betAmount === amt
+                  ? 'bg-secondary-container/20 border-primary/50 text-primary'
+                  : 'bg-white/[0.03] border-white/10 text-on-surface-variant/70 hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed'
+              }`}
+            >
+              {amt}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Gain potentiel */}
+      <div className="flex justify-between items-center bg-gradient-to-r from-tertiary/12 to-transparent p-4 rounded-xl border border-tertiary/20">
+        <span className="font-label-caps text-[10px] text-on-surface tracking-wider">GAIN POTENTIEL</span>
+        <span className="font-score-display text-[22px] text-tertiary text-glow tabular">
+          {potentialPayout.toLocaleString()}
+          <span className="text-[12px] ml-1 text-tertiary/70">TC</span>
+        </span>
+      </div>
+
+      <button
+        onClick={onPlaceBet}
+        disabled={submitting}
+        className="btn-primary w-full font-headline-lg-mobile text-[17px] py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+      >
+        <span className="material-symbols-outlined text-[20px]">
+          {submitting ? 'progress_activity' : 'bolt'}
+        </span>
+        {submitting ? 'Validation…' : 'Valider mon pari'}
+      </button>
     </div>
   );
 }

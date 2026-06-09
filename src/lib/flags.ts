@@ -46,7 +46,62 @@ const FLAGS: Record<string, string> = {
   'etats-unis': '🇺🇸',
 };
 
+const COUNTRY_CODES: Record<string, string> = {
+  'france': 'fr',
+  'angleterre': 'gb-eng',
+  'england': 'gb-eng',
+  'irlande du nord': 'gb-nir',
+  'northern ireland': 'gb-nir',
+  'irlande': 'ie',
+  'ireland': 'ie',
+  'ecosse': 'gb-sct',
+  'scotland': 'gb-sct',
+  'pays de galles': 'gb-wls',
+  'wales': 'gb-wls',
+  'espagne': 'es',
+  'spain': 'es',
+  'allemagne': 'de',
+  'germany': 'de',
+  'italie': 'it',
+  'italy': 'it',
+  'portugal': 'pt',
+  'belgique': 'be',
+  'belgium': 'be',
+  'pays-bas': 'nl',
+  'netherlands': 'nl',
+  'croatie': 'hr',
+  'croatia': 'hr',
+  'bresil': 'br',
+  'brésil': 'br',
+  'brazil': 'br',
+  'argentine': 'ar',
+  'argentina': 'ar',
+  'maroc': 'ma',
+  'morocco': 'ma',
+  'suisse': 'ch',
+  'switzerland': 'ch',
+  'pologne': 'pl',
+  'poland': 'pl',
+  'danemark': 'dk',
+  'denmark': 'dk',
+  'autriche': 'at',
+  'austria': 'at',
+  'ukraine': 'ua',
+  'turquie': 'tr',
+  'turkey': 'tr',
+  'usa': 'us',
+  'etats-unis': 'us',
+};
+
 export function flagFor(team: string): string {
   if (!team) return '⚽';
   return FLAGS[team.trim().toLowerCase()] || '⚽';
 }
+
+export function flagUrlFor(team: string): string | null {
+  if (!team) return null;
+  const code = COUNTRY_CODES[team.trim().toLowerCase()];
+  if (!code) return null;
+  return `https://flagcdn.com/w160/${code}.png`;
+}
+

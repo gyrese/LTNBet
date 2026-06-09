@@ -5,12 +5,13 @@ test.describe('Stadium Live Game Integration Flow', () => {
   test('should complete the entire user lifecycle, betting, and admin resolution', async ({ page }) => {
     const randomUser = `Test-${Math.floor(Math.random() * 100000)}`;
 
-    const testMatchId = `test-match-${Math.floor(Math.random() * 100000)}`;
+    const testMatchId = 'a0000000-0000-0000-0000-000000000001';
 
     // Reset/Create a fresh active match session so the test starts in a predictable state
-    await page.request.post('/api/db', {
+    const response = await page.request.post('/api/db', {
       data: {
         op: 'create_session',
+        force: true,
         match: {
           id: testMatchId,
           homeTeam: 'France',
@@ -28,6 +29,8 @@ test.describe('Stadium Live Game Integration Flow', () => {
         }
       }
     });
+    console.log("create_session response status:", response.status());
+    console.log("create_session response body:", await response.text());
 
     // 1. Go to Join Page
     await page.goto('/join');

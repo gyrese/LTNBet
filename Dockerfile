@@ -2,7 +2,9 @@
 FROM node:20-slim AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+# npm install (et non npm ci) : le package-lock.json est généré sous Windows et omet des deps
+# optionnelles natives nécessaires sous Linux (@emnapi/* via @tailwindcss/oxide). install les résout.
+RUN npm install --no-audit --no-fund
 COPY . .
 RUN npm run build
 

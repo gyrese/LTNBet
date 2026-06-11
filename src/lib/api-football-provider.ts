@@ -145,9 +145,9 @@ export function mapApifStatus(short: string): 'upcoming' | 'live' | 'half_time' 
 // ─── Stats cache (5 min) ──────────────────────────────────────────────────────
 
 const statsCache = new Map<number, { at: number; data: ApifStats }>();
-// API-Football ne sert plus QUE aux stats (le score vient de Football-Data) → on peut rafraîchir
-// plus souvent sans risque de quota : ~3 min → ≈ 30 cycles sur un match, bien sous les 100/jour.
-const STATS_TTL = 3 * 60_000;
+// API-Football est la source primaire (score + stats) → on préserve le quota : stats rafraîchies
+// toutes les 5 min (le score, lui, est récupéré à chaque cycle via l'appel fixture).
+const STATS_TTL = 5 * 60_000;
 
 interface ApifStatTeam {
   team: { id: number };

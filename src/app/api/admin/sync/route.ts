@@ -255,11 +255,11 @@ function logFirstScorerHint(matchId: string, scorers: ScorerEvent[], homeTeam: s
   );
 }
 
-/** Intervalle de sync. Football-Data est la source primaire du score (≈10 req/min → 15 s sûr). */
+/** Intervalle de sync. API-Football primaire (quota ~100 req/jour) → on espace pour tenir tout le match. */
 function syncIntervalMs(match: MatchRow): number {
-  // Les stats API-Football sont cachées indépendamment (cf. STATS_TTL) : le rythme de sync
-  // ne multiplie pas leur conso. On ralentit à la mi-temps (rien ne bouge).
-  return match.status === 'half_time' ? 60_000 : 15_000;
+  // 1 appel fixture (score) par cycle + stats cachées (STATS_TTL). À 90 s : ~70 cycles sur un match
+  // de 2 h → on reste sous le quota. Le score reste pilotable EN DIRECT à la main depuis /admin.
+  return match.status === 'half_time' ? 180_000 : 90_000;
 }
 
 // ─── Simulateur local (aucune clé API configurée) ─────────────────────────────

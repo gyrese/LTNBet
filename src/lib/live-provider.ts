@@ -124,8 +124,8 @@ export async function getLiveData(match: MatchRow): Promise<LiveData | null> {
   let discoveredFdId: number | undefined;
   const date = (match.starts_at || new Date().toISOString()).slice(0, 10);
 
-  // ── 1. STATS détaillées : API-Football (source unique des stats) ────────────
-  // Toujours en statsOnly : le score/statut viennent de Football-Data (étape 2).
+  // ── 1. API-Football : SOURCE PRIMAIRE (score + statut + stats + buteurs en un appel) ──
+  // Football-Data ne couvre pas la CdM 2026 en gratuit → API-Football mène. FD/odds-api = filets.
 
   let apifId = parseApifId(match.apifs_id);
   if (!apifId && process.env.FOOTBALL_API_KEY) {
@@ -136,62 +136,46 @@ export async function getLiveData(match: MatchRow): Promise<LiveData | null> {
     }
   }
 
+  let hasScore = false;
   if (apifId !== null) {
-    const apif = await getFixtureLiveData(apifId, true);
+    const apif = await getFixtureLiveData(apifId, false); // complet : score+statut+stats+buteurs
     if (apif) {
+      result.score = apif.score;
+      result.status = apif.status;
+      if (apif.elapsedTime) result.elapsedTime = apif.elapsedTime;
+      result.halftimeScore = apif.halftimeScore;
       result.stats = apif.stats;
       result.cornerDataAvailable = apif.stats !== null;
-      // Buteurs API-Football opportunistes (Football-Data reste la référence à l'étape 2).
       if (apif.scorers.length) result.scorers = apif.scorers;
-      if (apif.stats) result.sources.push('api-football:stats');
-    }
-  }
-
-  // ── 2. SCORE + statut + buteurs + score mi-temps : Football-Data (PRIMAIRE) ──
-
-  let fdId = parseFdId(match.fd_match_id);
-  if (!fdId && process.env.FOOTBALL_DATA_ORG_KEY) {
-    const found = await findFdMatchId(match.home_team, match.away_team, date);
-    if (found) {
-      fdId = found;
-      discoveredFdId = found;
-    }
-  }
-
-  let hasScore = false;
-  if (fdId) {
-    const fd = await getFdLiveDataById(fdId);
-    if (fd) {
-      result.score = fd.score;
-      result.status = fd.status;
-      result.halftimeScore = fd.halftimeScore;
-      if (fd.scorers.length) result.scorers = fd.scorers; // FD = source de buteurs la plus fiable
-      result.sources.push('football-data:score+status');
+      result.sources.push('api-football:full');
       hasScore = true;
     }
   }
 
-  // ── 3. BACKUPS score si Football-Data indisponible ──────────────────────────
-
-  // Backup A : API-Football complet (réutilise le fixture id déjà connu).
-  if (!hasScore && apifId !== null) {
-    const apifFull = await getFixtureLiveData(apifId, false);
-    if (apifFull) {
-      result.score = apifFull.score;
-      result.status = apifFull.status;
-      if (apifFull.elapsedTime) result.elapsedTime = apifFull.elapsedTime;
-      result.halftimeScore = apifFull.halftimeScore;
-      if (apifFull.scorers.length) result.scorers = apifFull.scorers;
-      if (apifFull.stats && !result.stats) {
-        result.stats = apifFull.stats;
-        result.cornerDataAvailable = true;
+  // ── 2. FILET : Football-Data (score/statut/buteurs) si API-Football indisponible ──
+  if (!hasScore) {
+    let fdId = parseFdId(match.fd_match_id);
+    if (!fdId && process.env.FOOTBALL_DATA_ORG_KEY) {
+      const found = await findFdMatchId(match.home_team, match.away_team, date);
+      if (found) {
+        fdId = found;
+        discoveredFdId = found;
       }
-      result.sources.push('api-football:score+status(backup)');
-      hasScore = true;
+    }
+    if (fdId) {
+      const fd = await getFdLiveDataById(fdId);
+      if (fd) {
+        result.score = fd.score;
+        result.status = fd.status;
+        result.halftimeScore = fd.halftimeScore;
+        if (fd.scorers.length) result.scorers = fd.scorers;
+        result.sources.push('football-data:score+status');
+        hasScore = true;
+      }
     }
   }
 
-  // Backup B : odds-api.io (dernier recours, si event id lié).
+  // ── 3. FILET ultime : odds-api.io (score/statut, si event id lié) ──
   if (!hasScore && match.odds_event_id) {
     const oai = await getLiveEvent(match.odds_event_id);
     if (oai) {
@@ -208,8 +192,8 @@ export async function getLiveData(match: MatchRow): Promise<LiveData | null> {
     }
   }
 
-  // ── 4. Temps de jeu estimé (si aucune source n'a donné de minute précise) ────
-  if (result.status === 'live') {
+  // ── 4. Temps de jeu estimé seulement si aucune source précise (cas FD/odds-api) ──
+  if (result.status === 'live' && !result.sources.some((s) => s.startsWith('api-football'))) {
     const est = estimateElapsed(match.starts_at);
     if (est !== null) result.elapsedTime = est;
   }

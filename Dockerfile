@@ -1,6 +1,10 @@
 # Stage 1: Build the application
 FROM node:20-slim AS builder
 WORKDIR /app
+# Outils de build pour compiler les modules natifs (better-sqlite3) quand aucun binaire
+# pré-compilé n'est disponible pour ce Linux. Le runner réutilise le binaire compilé (même base).
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
 # npm install (et non npm ci) : le package-lock.json est généré sous Windows et omet des deps
 # optionnelles natives nécessaires sous Linux (@emnapi/* via @tailwindcss/oxide). install les résout.

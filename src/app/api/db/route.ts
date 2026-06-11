@@ -8,6 +8,7 @@ import { triggerWebhooks } from '@/lib/webhooks';
 import { getParsedOdds } from '@/lib/odds-provider';
 import { buildSessionBlueprint, type BlueprintMarket } from '@/lib/session-blueprint';
 import { getOnlinePlayers, countOnline, clearPresence, getActiveLeaderboardPlayers } from '@/lib/presence';
+import { resolveHalftimeMarkets, resolveFulltimeMarkets } from '@/lib/resolve';
 
 const ARCHIVE_DIR = path.join(process.cwd(), 'data', 'archives');
 const CLOSE_AFTER_MS = 30 * 60 * 1000; // 30 min après la fin du match
@@ -399,6 +400,15 @@ export async function POST(req: NextRequest) {
       suspendImpossibleOutcomes(match.id, match.home_score, match.away_score);
     }
 
+    // Résolution AUTO des paris quand l'admin bascule le statut à la main (Mi-temps / Terminé).
+    // Le « Premier Buteur » reste manuel (le système ne connaît pas la Vedette qui a marqué).
+    if (match && stats.status === 'half_time') {
+      resolveHalftimeMarkets(match.id, match.home_team, match.away_team, match.home_score, match.away_score, true);
+    } else if (match && stats.status === 'finished') {
+      const corners = (match.corners_home as number) ?? 0;
+      resolveFulltimeMarkets(match.id, match.home_team, match.away_team, match.home_score, match.away_score, corners, corners > 0);
+    }
+
     // Trigger webhooks
     if (stats.status) {
       triggerWebhooks('match.status_change', { status: stats.status, time_elapsed: match.elapsed_time });
@@ -418,6 +428,11 @@ export async function POST(req: NextRequest) {
     db.prepare("UPDATE matches SET status = 'finished', finished_at = COALESCE(finished_at, ?) WHERE id = ?").run(new Date().toISOString(), activeMatchId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(activeMatchId) as any;
+    // Résolution auto des marchés de fin (résultat, score, BTTS, +2.5, corners). Buteur = manuel.
+    if (match) {
+      const corners = (match.corners_home as number) ?? 0;
+      resolveFulltimeMarkets(match.id, match.home_team, match.away_team, match.home_score, match.away_score, corners, corners > 0);
+    }
     triggerWebhooks('match.finished', match);
     broadcast('match_update', match);
     return json({ success: true, match });

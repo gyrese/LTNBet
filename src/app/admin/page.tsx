@@ -315,9 +315,11 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <span className={`font-label-caps text-[10px] px-3.5 py-1.5 rounded-full border self-start sm:self-center ${
-                    match.status === 'finished' ? 'bg-error/12 border-error/30 text-error' : 'bg-emerald-500/12 border-emerald-500/30 text-emerald-300'
+                    match.status === 'finished' ? 'bg-error/12 border-error/30 text-error'
+                    : match.status === 'upcoming' ? 'bg-tertiary/12 border-tertiary/30 text-tertiary'
+                    : 'bg-emerald-500/12 border-emerald-500/30 text-emerald-300'
                   }`}>
-                    {match.status === 'finished' ? 'Match Terminé' : match.status === 'half_time' ? 'Mi-Temps' : 'Match En Cours'}
+                    {match.status === 'finished' ? 'Match Terminé' : match.status === 'half_time' ? 'Mi-Temps' : match.status === 'upcoming' ? 'Avant Match' : 'Match En Cours'}
                   </span>
                 </div>
 

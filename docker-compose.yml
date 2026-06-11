@@ -5,10 +5,10 @@ services:
       dockerfile: Dockerfile
     container_name: ltn-bet-app
     restart: always
-    # Port HÔTE:CONTENEUR. Le 3000 hôte est déjà pris par une autre app → on publie sur 3001.
-    # (Le conteneur écoute toujours sur 3000 en interne.) Change le 3001 si besoin.
+    # Port HÔTE:CONTENEUR. Le 3000 hôte est déjà pris par une autre app → on publie sur 3008.
+    # (Le conteneur écoute toujours sur 3000 en interne.)
     ports:
-      - "3001:3000"
+      - "3008:3000"
     volumes:
       - ./data:/app/data
     # Injecte TOUTES les clés (odds-api.io, API-Football, Football-Data, bookmakers) dans le conteneur.

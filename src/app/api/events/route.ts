@@ -8,12 +8,13 @@ export async function GET() {
       const enc = new TextEncoder();
       controller.enqueue(enc.encode(': connected\n\n'));
 
+      let hb: ReturnType<typeof setInterval>;
       const unsub = subscribe((data) => {
-        try { controller.enqueue(enc.encode(data)); } catch { unsub(); }
+        try { controller.enqueue(enc.encode(data)); } catch { clearInterval(hb); unsub(); }
       });
 
       // Heartbeat every 25s to keep connection alive
-      const hb = setInterval(() => {
+      hb = setInterval(() => {
         try { controller.enqueue(enc.encode(': ping\n\n')); } catch { clearInterval(hb); unsub(); }
       }, 25_000);
     },

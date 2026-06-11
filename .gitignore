@@ -46,3 +46,7 @@ next-env.d.ts
 /data/*.db-wal
 .env*
 /test-results/
+
+# runtime data (base SQLite + archives JSON avec données joueurs) & junk dev
+/data/
+/scratch/

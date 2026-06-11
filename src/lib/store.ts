@@ -134,7 +134,7 @@ interface GameStore {
   sessionChecked: boolean;
   supabaseLoaded: boolean;
 
-  registerUser: (username: string, avatar: string) => Promise<void>;
+  registerUser: (username: string, avatar: string) => Promise<{ success: boolean; error?: string }>;
   logoutUser: () => void;
   promoteToAdmin: () => void;
   initFromSupabase: () => Promise<void>;
@@ -306,7 +306,13 @@ const lsSet = (key: string, value: unknown) => {
 // ─── API helper ───────────────────────────────────────────────────────────────
 
 async function dbPost(body: Record<string, unknown>) {
-  const r = await fetch('/api/db', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  // Si ce navigateur est un admin déverrouillé, on joint le secret (les ops joueur l'ignorent).
+  if (typeof window !== 'undefined') {
+    const secret = sessionStorage.getItem('ltn_admin_secret');
+    if (secret) headers['x-admin-secret'] = secret;
+  }
+  const r = await fetch('/api/db', { method: 'POST', headers, body: JSON.stringify(body) });
   return r.json();
 }
 
@@ -346,15 +352,19 @@ function startPresence(get: () => GameStore) {
     window.addEventListener(ev, bump, { passive: true }),
   );
 
+  // Heartbeat immédiat quand l'onglet redevient visible
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        const user = get().currentUser;
+        if (user) sendHeartbeat(user.id);
+      }
+    });
+  }
+
   setInterval(() => {
     const user = get().currentUser;
     if (!user) return;
-    // Timeout d'inactivité → déconnexion automatique
-    if (Date.now() - lastActivity > INACTIVITY_LIMIT_MS) {
-      get().logoutUser();
-      redirectToJoin();
-      return;
-    }
     // On ne signale la présence que si l'onglet est visible (les onglets fantômes passent hors-ligne)
     if (typeof document !== 'undefined' && document.hidden) return;
     sendHeartbeat(user.id);
@@ -416,6 +426,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (player) {
           set({ currentUser: playerFromDb(player), isUserAdmin: Boolean(player.is_admin) });
           lsSet('ltn_user_profile', playerFromDb(player));
+          sendHeartbeat(player.id);
           if (bets) set({ myBets: bets.map(betFromDb) });
           if (badges) set({ myBadges: badges });
           if (missions) set({ missions });
@@ -493,14 +504,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Nouveau match créé par l'admin (ou reset) : recharger entièrement l'état du jeu
     es.addEventListener('session_reset', (e) => {
       const { match, markets } = JSON.parse(e.data);
+      // Les paris locaux référencent l'ancien match (supprimé/remplacé) → on les purge pour éviter
+      // des paris « fantômes » dans le profil (AV-6).
+      lsSet('ltn_user_bets', []);
       if (match) {
         set({
           match: matchFromDb(match),
           markets: (markets as unknown[]).map(marketFromDb),
           hasActiveMatch: true,
+          myBets: [],
         });
       } else {
-        set({ match: NO_MATCH, markets: [], hasActiveMatch: false });
+        set({ match: NO_MATCH, markets: [], hasActiveMatch: false, myBets: [] });
       }
     });
 
@@ -530,13 +545,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // ── Auth ───────────────────────────────────────────────────────────────────
 
   registerUser: async (username: string, avatar: string) => {
-    const { player } = await dbPost({ op: 'register', username, avatar });
-    if (!player) return;
-    const p = playerFromDb(player);
+    // Jeton d'appareil (string brute, hors lsSet pour éviter le JSON.stringify) → lie le pseudo à ce navigateur.
+    const deviceToken = typeof window !== 'undefined' ? (localStorage.getItem('ltn_device_token') || undefined) : undefined;
+    const res = await dbPost({ op: 'register', username, avatar, deviceToken });
+    if (res?.taken || !res?.player) {
+      return { success: false, error: res?.error || 'Inscription impossible, réessaie.' };
+    }
+    if (res.deviceToken && typeof window !== 'undefined') localStorage.setItem('ltn_device_token', res.deviceToken);
+    const p = playerFromDb(res.player);
     lsSet('ltn_user_profile', p);
     set({ currentUser: p });
+    sendHeartbeat(p.id);
     get().updateLeaderboard();
     import('canvas-confetti').then(c => c.default({ particleCount: 50, spread: 60, origin: { y: 0.8 } }));
+    return { success: true };
   },
 
   logoutUser: () => {
@@ -704,12 +726,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     if (currentUser && newLeader?.id === currentUser.id) {
-      const myBadges = get().myBadges;
-      if (!myBadges.includes('legende')) {
-        const updated = [...myBadges, 'legende'];
-        lsSet('ltn_user_badges', updated);
-        set({ myBadges: updated });
-        get().triggerGameEvent({ type: 'badge', title: 'NOUVEAU BADGE ! 🏅', subtitle: `${currentUser.username} débloque "Légende des Toiles" !` });
+      const hasWonBet = get().myBets.some(b => b.status === 'won');
+      if (hasWonBet) {
+        const myBadges = get().myBadges;
+        if (!myBadges.includes('legende')) {
+          const updated = [...myBadges, 'legende'];
+          lsSet('ltn_user_badges', updated);
+          set({ myBadges: updated });
+          get().triggerGameEvent({ type: 'badge', title: 'NOUVEAU BADGE ! 🏅', subtitle: `${currentUser.username} débloque "Légende des Toiles" !` });
+        }
       }
     }
 
@@ -722,8 +747,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    const bots = all.filter(p => p.id.startsWith('c0000000'));
-    set({ leaderboard: bots });
+    set({ leaderboard: all });
     dbPost({ op: 'update_leaderboard' });
   },
 
@@ -746,8 +770,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           set({ myBadges: res.badges });
         }
       }
-    } catch (e) {
-      console.error('updateMissionProgress error:', e);
+    } catch (err) {
+      console.error(err);
     }
   },
 
@@ -806,7 +830,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   runSimulationStep: () => {
     const { match, markets, leaderboard } = get();
-    if (match.status !== 'live') return;
+    if (!match || match.status === 'finished' || match.status === 'upcoming') return;
 
     const newElapsedTime = match.elapsedTime + 1;
     let newStatus: Match['status'] = match.status;
@@ -836,21 +860,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Bot bets
     if (Math.random() > 0.6) {
-      const bot = leaderboard[Math.floor(Math.random() * leaderboard.length)];
-      const openMarkets = markets.filter(m => !m.isClosed && m.isActive);
-      if (openMarkets.length > 0) {
-        const mkt = openMarkets[Math.floor(Math.random() * openMarkets.length)];
-        const oc = mkt.outcomes[Math.floor(Math.random() * mkt.outcomes.length)];
-        const amount = Math.min(bot.toilesCoins, Math.floor(Math.random() * 4 + 1) * 50);
-        if (amount > 0) {
-          const updatedBots = leaderboard.map(b => b.id === bot.id ? { ...b, toilesCoins: b.toilesCoins - amount, totalBets: b.totalBets + 1 } : b);
-          const updatedMarkets = markets.map(m => {
-            if (m.id !== mkt.id) return m;
-            const outcomes = m.outcomes.map(o => o.id === oc.id ? { ...o, totalBetAmount: o.totalBetAmount + amount, totalBetsCount: o.totalBetsCount + 1 } : o);
-            const calc = calculateDynamicOdds(outcomes);
-            return { ...m, outcomes: outcomes.map(o => { const c = calc.find(x => x.id === o.id); return { ...o, currentOdds: c ? c.odds : o.currentOdds }; }) };
-          });
-          set({ leaderboard: updatedBots, markets: updatedMarkets });
+      const botsOnly = leaderboard.filter(p => p.id.startsWith('c0000000'));
+      if (botsOnly.length > 0) {
+        const bot = botsOnly[Math.floor(Math.random() * botsOnly.length)];
+        const openMarkets = markets.filter(m => !m.isClosed && m.isActive);
+        if (openMarkets.length > 0) {
+          const mkt = openMarkets[Math.floor(Math.random() * openMarkets.length)];
+          const oc = mkt.outcomes[Math.floor(Math.random() * mkt.outcomes.length)];
+          const amount = Math.min(bot.toilesCoins, Math.floor(Math.random() * 4 + 1) * 50);
+          if (amount > 0) {
+            const updatedBots = leaderboard.map(b => b.id === bot.id ? { ...b, toilesCoins: b.toilesCoins - amount, totalBets: b.totalBets + 1 } : b);
+            const updatedMarkets = markets.map(m => {
+              if (m.id !== mkt.id) return m;
+              const outcomes = m.outcomes.map(o => o.id === oc.id ? { ...o, totalBetAmount: o.totalBetAmount + amount, totalBetsCount: o.totalBetsCount + 1 } : o);
+              const calc = calculateDynamicOdds(outcomes);
+              return { ...m, outcomes: outcomes.map(o => { const c = calc.find(x => x.id === o.id); return { ...o, currentOdds: c ? c.odds : o.currentOdds }; }) };
+            });
+            set({ leaderboard: updatedBots, markets: updatedMarkets });
+          }
         }
       }
     }

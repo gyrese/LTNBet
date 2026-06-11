@@ -1,24 +1,25 @@
 import type { Metadata } from "next";
-import { Anybody, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Bebas_Neue, DM_Sans, JetBrains_Mono } from "next/font/google";
 import AppProvider from "@/components/AppProvider";
 import "./globals.css";
 
-const anybody = Anybody({
+/* Bebas Neue — display/score/headline font (all-caps, ultra-bold feel) */
+const bebasNeue = Bebas_Neue({
   variable: "--font-anybody",
   subsets: ["latin"],
-  weight: ["400", "600", "700", "800", "900"],
-  style: ["normal", "italic"],
+  weight: ["400"],
   display: "swap",
 });
 
-const hankenGrotesk = Hanken_Grotesk({
+/* DM Sans — clean modern body/UI font */
+const dmSans = DM_Sans({
   variable: "--font-hanken",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
-  style: ["normal", "italic"],
   display: "swap",
 });
 
+/* JetBrains Mono — odds, data, timestamps */
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
   subsets: ["latin"],
@@ -27,9 +28,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Les Toiles Noires Predictor",
+  title: "LTNBet · Live Predictor",
   description:
-    "Application de pronostics sportifs en temps réel pour l'animation des matchs de l'équipe de France aux Toiles Noires.",
+    "Application de pronostics sportifs en temps réel pour l'animation des matchs aux Toiles Noires.",
 };
 
 export default function RootLayout({
@@ -40,10 +41,9 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
-      className={`${anybody.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${bebasNeue.variable} ${dmSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <head>
-        {/* Material Symbols Outlined stylesheet */}
         <link
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
           rel="stylesheet"
@@ -53,7 +53,6 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-full bg-surface-container-lowest text-on-surface flex flex-col antialiased"
       >
-        {/* Premium app-wide cinematic backdrop (fixed, behind everything) */}
         <div className="app-backdrop" aria-hidden="true" />
         <div className="app-grain" aria-hidden="true" />
         <AppProvider>{children}</AppProvider>

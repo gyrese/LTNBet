@@ -30,6 +30,16 @@ interface Props {
 const inputClass =
   'w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all';
 
+// En-têtes des requêtes admin (joint le secret stocké au déverrouillage du panneau).
+const adminHeaders = (): Record<string, string> => {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (typeof window !== 'undefined') {
+    const s = sessionStorage.getItem('ltn_admin_secret');
+    if (s) h['x-admin-secret'] = s;
+  }
+  return h;
+};
+
 const todayStr = () => new Date().toISOString().split('T')[0];
 
 const shiftDate = (d: string, days: number) => {
@@ -131,7 +141,7 @@ export default function StartSessionModal({ open, onClose, onCreated }: Props) {
     try {
       const res = await fetch('/api/db', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders(),
         body: JSON.stringify({ op: 'preview_session', match: m }),
       }).then((r) => r.json());
       if (res.success) {
@@ -181,7 +191,7 @@ export default function StartSessionModal({ open, onClose, onCreated }: Props) {
     try {
       const res = await fetch('/api/db', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders(),
         body: JSON.stringify({ op: 'create_session', force: true, match: selected, markets }),
       }).then((r) => r.json());
       if (res.success) {

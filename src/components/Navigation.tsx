@@ -8,6 +8,7 @@ import { useGameStore } from '@/lib/store';
 
 const NAV_ITEMS = [
   { href: '/', label: 'PARIS', icon: 'stadium' },
+  { href: '/history', label: 'MES PARIS', icon: 'history' },
   { href: '/ranking', label: 'CLASSEMENT', icon: 'leaderboard' },
   { href: '/profile', label: 'PROFIL', icon: 'person' },
 ];
@@ -20,10 +21,19 @@ export default function Navigation() {
 
   return (
     <>
-      {/* ============ TOP APP BAR (desktop + tablet) ============ */}
+      {/* ============ TOP APP BAR ============ */}
       <header className="fixed top-0 inset-x-0 z-50">
-        <div className="glass-strong border-b border-white/10 shadow-[0_10px_30px_-20px_rgba(0,0,0,0.9)]">
+        <div
+          className="border-b shadow-[0_8px_32px_-16px_rgba(0,0,0,0.9)]"
+          style={{
+            background: 'linear-gradient(180deg, rgba(14,14,44,0.97) 0%, rgba(10,10,30,0.95) 100%)',
+            borderColor: 'rgba(123,97,255,0.18)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+          }}
+        >
           <div className="w-full max-w-container-max mx-auto flex justify-between items-center px-4 md:px-16 py-2">
+
             {/* Brand */}
             <div className="flex items-center gap-3">
               <Link href="/" className="flex items-center group">
@@ -32,7 +42,10 @@ export default function Navigation() {
                   alt="LTNBet"
                   width={200}
                   height={80}
-                  className="h-14 md:h-16 w-auto object-contain drop-shadow-[0_0_14px_rgba(43,91,255,0.45)] group-hover:drop-shadow-[0_0_20px_rgba(43,91,255,0.7)] transition-all"
+                  className="h-14 md:h-16 w-auto object-contain transition-all"
+                  style={{
+                    filter: 'drop-shadow(0 0 14px rgba(123,97,255,0.50))',
+                  }}
                   priority
                 />
               </Link>
@@ -43,21 +56,25 @@ export default function Navigation() {
             </div>
 
             {/* Desktop nav */}
-            <nav className="hidden md:flex gap-1.5 items-center">
+            <nav className="hidden md:flex gap-1 items-center">
               {NAV_ITEMS.map((item) => {
                 const isActive = pathname === item.href;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`relative font-label-caps text-label-caps tracking-widest px-4 py-2.5 rounded-xl transition-colors ${
+                    className={`relative font-label-caps text-[11px] tracking-widest px-4 py-2.5 rounded-xl transition-colors ${
                       isActive ? 'text-white' : 'text-on-surface-variant hover:text-on-surface'
                     }`}
                   >
                     {isActive && (
                       <motion.span
                         layoutId="nav-pill-desktop"
-                        className="absolute inset-0 rounded-xl bg-white/8 border border-primary/30 glow-accent"
+                        className="absolute inset-0 rounded-xl border border-primary/45"
+                        style={{
+                          background: 'linear-gradient(180deg, rgba(123,97,255,0.22) 0%, rgba(123,97,255,0.05) 100%)',
+                          boxShadow: '0 0 18px rgba(123,97,255,0.22)',
+                        }}
                         transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                       />
                     )}
@@ -67,16 +84,23 @@ export default function Navigation() {
               })}
             </nav>
 
-            {/* Balance chip */}
-            <div className="flex items-center gap-1.5 font-data-mono bg-gradient-to-b from-tertiary/15 to-tertiary/5 px-3.5 py-2 rounded-full border border-tertiary/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+            {/* Balance chip — orange energy */}
+            <div
+              className="flex items-center gap-1.5 font-data-mono px-3.5 py-2 rounded-full border"
+              style={{
+                background: 'linear-gradient(180deg, rgba(255,80,0,0.18) 0%, rgba(255,80,0,0.06) 100%)',
+                borderColor: 'rgba(255,80,0,0.28)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10), 0 0 16px rgba(255,80,0,0.14)',
+              }}
+            >
               <span
-                className="material-symbols-outlined text-[18px] text-tertiary"
+                className="material-symbols-outlined text-[18px] text-home"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 monetization_on
               </span>
-              <span className="font-bold text-tertiary tabular">{currentUser.toilesCoins.toLocaleString()}</span>
-              <span className="text-tertiary/60 text-[11px]">TC</span>
+              <span className="font-bold text-home tabular">{currentUser.toilesCoins.toLocaleString()}</span>
+              <span className="text-[11px] text-home/60">TC</span>
             </div>
           </div>
         </div>
@@ -84,7 +108,16 @@ export default function Navigation() {
 
       {/* ============ FLOATING BOTTOM NAV (mobile) ============ */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 pointer-events-none">
-        <div className="pointer-events-auto max-w-md mx-auto glass-strong rounded-2xl border border-white/10 shadow-[0_-10px_30px_-12px_rgba(0,0,0,0.8)] flex justify-around items-center px-2 py-2">
+        <div
+          className="pointer-events-auto max-w-md mx-auto rounded-2xl flex justify-around items-center px-2 py-2"
+          style={{
+            background: 'linear-gradient(160deg, rgba(20,20,60,0.97) 0%, rgba(10,10,30,0.99) 100%)',
+            border: '1px solid rgba(123,97,255,0.20)',
+            boxShadow: '0 -4px 30px -8px rgba(123,97,255,0.22), 0 -20px 40px -20px rgba(0,0,0,0.9)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+          }}
+        >
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -96,13 +129,17 @@ export default function Navigation() {
                 {isActive && (
                   <motion.span
                     layoutId="nav-pill-mobile"
-                    className="absolute inset-0 rounded-xl bg-gradient-to-b from-primary/20 to-secondary-container/10 border border-primary/30"
+                    className="absolute inset-0 rounded-xl border border-primary/45"
+                    style={{
+                      background: 'linear-gradient(180deg, rgba(123,97,255,0.26) 0%, rgba(123,97,255,0.06) 100%)',
+                      boxShadow: '0 0 16px rgba(123,97,255,0.20)',
+                    }}
                     transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                   />
                 )}
                 <span
                   className={`material-symbols-outlined relative z-10 text-[24px] transition-colors ${
-                    isActive ? 'text-primary' : 'text-on-surface-variant/70'
+                    isActive ? 'text-primary' : 'text-on-surface-variant/60'
                   }`}
                   style={{ fontVariationSettings: isActive ? "'FILL' 1" : undefined }}
                 >
@@ -110,7 +147,7 @@ export default function Navigation() {
                 </span>
                 <span
                   className={`font-label-caps text-[9px] relative z-10 transition-colors ${
-                    isActive ? 'text-primary' : 'text-on-surface-variant/60'
+                    isActive ? 'text-primary' : 'text-on-surface-variant/50'
                   }`}
                 >
                   {item.label}

@@ -19,6 +19,17 @@ interface Props {
 
 const POLL_MS = 8_000;
 
+// En-têtes admin : le secret vient de sessionStorage (saisi au déverrouillage), pas d'un NEXT_PUBLIC_*
+// (qui serait figé au build et donc VIDE dans l'image Docker → 401). Cohérent avec le store/modal.
+function adminHeaders(): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (typeof window !== 'undefined') {
+    const s = sessionStorage.getItem('ltn_admin_secret');
+    if (s) h['x-admin-secret'] = s;
+  }
+  return h;
+}
+
 export default function PresencePanel({ onCountChange }: Props) {
   const [players, setPlayers] = useState<OnlinePlayer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +56,7 @@ export default function PresencePanel({ onCountChange }: Props) {
   const kick = async (userId: string) => {
     await fetch('/api/db', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders(),
       body: JSON.stringify({ op: 'kick_player', userId }),
     });
     setPlayers((prev) => prev.filter((p) => p.id !== userId));
@@ -54,7 +65,7 @@ export default function PresencePanel({ onCountChange }: Props) {
   const kickAll = async () => {
     await fetch('/api/db', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders(),
       body: JSON.stringify({ op: 'kick_all' }),
     });
     setPlayers([]);

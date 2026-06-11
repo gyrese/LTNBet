@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import db, { suspendImpossibleOutcomes } from '@/lib/db';
+import db, { suspendImpossibleOutcomes, awardEarnedBadges, progressExactScoreMission } from '@/lib/db';
 import { broadcast } from '@/lib/sse-bus';
 import { calculateDynamicOdds } from '@/lib/odds';
 import { triggerWebhooks } from '@/lib/webhooks';
 import { getParsedOdds } from '@/lib/odds-provider';
 import { buildSessionBlueprint, type BlueprintMarket } from '@/lib/session-blueprint';
-import { getOnlinePlayers, countOnline, clearPresence } from '@/lib/presence';
+import { getOnlinePlayers, countOnline, clearPresence, getActiveLeaderboardPlayers } from '@/lib/presence';
 
 const ARCHIVE_DIR = path.join(process.cwd(), 'data', 'archives');
 const CLOSE_AFTER_MS = 30 * 60 * 1000; // 30 min après la fin du match
@@ -21,10 +21,10 @@ function getActiveMatchRow(): Row | undefined {
 }
 
 function getActiveMatchId(): string {
+  // Uniquement le match ACTIF. Pas de repli sur le dernier match archivé : sinon une page admin
+  // restée ouverte après clôture modifierait silencieusement un match terminé (AV-7).
   const row = getActiveMatchRow();
-  if (row) return row.id as string;
-  const latest = db.prepare('SELECT id FROM matches ORDER BY starts_at DESC LIMIT 1').get() as { id: string } | undefined;
-  return latest?.id || '';
+  return row ? (row.id as string) : '';
 }
 
 // Construit l'archive JSON complète d'un match (résultats + paris + classement) et l'écrit sur disque.
@@ -107,8 +107,8 @@ export async function GET(req: NextRequest) {
           outcomes: db.prepare('SELECT * FROM outcomes WHERE market_id = ?').all(m.id as string),
         }))
       : [];
-    // Return all players (bots + users) sorted by rank for the global leaderboard with badge count
-    const bots = db.prepare('SELECT p.*, (SELECT COUNT(*) FROM player_badges pb WHERE pb.player_id = p.id) as badge_count FROM players p ORDER BY rank').all();
+    // Return active players (bots + online/betting users) sorted by rank with badge count
+    const bots = getActiveLeaderboardPlayers(getActiveMatchId());
     const settings = match ? db.prepare('SELECT * FROM game_settings WHERE match_id = ?').get(match.id) : null;
     const rewards = db.prepare('SELECT * FROM rewards').all();
     const rewardLedger = db.prepare('SELECT * FROM reward_ledger ORDER BY created_at DESC').all();
@@ -188,25 +188,65 @@ export async function GET(req: NextRequest) {
 
 // ─── POST /api/db ─────────────────────────────────────────────────────────────
 
+// Ops réservées à l'admin (staff du bar). Les ops joueur (register, place_bet,
+// update_mission_progress, update_leaderboard) ne sont PAS dans cette liste.
+const ADMIN_OPS = new Set([
+  'create_session', 'preview_session', 'resolve_market', 'update_match', 'end_match',
+  'close_session', 'delete_session', 'reset_all', 'create_flash_market', 'close_market',
+  'delete_market', 'toggle_double_gains', 'attribute_reward', 'create_reward', 'claim_reward',
+  'kick_player', 'kick_all', 'game_event',
+]);
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { op } = body;
 
+  // Secret admin partagé. Tant qu'il n'est PAS défini en env, on ne bloque rien (compat / anti-lockout).
+  // Le mot de passe historique 'toiles2024' sert de repli pour le déverrouillage si l'env est absent.
+  const ADMIN_SECRET = process.env.ADMIN_API_SECRET;
+
+  // Déverrouillage admin : valide le secret saisi (feedback immédiat côté gate).
+  if (op === 'admin_check') {
+    const expected = ADMIN_SECRET || 'toiles2024';
+    const ok = req.headers.get('x-admin-secret') === expected;
+    return json({ success: ok }, ok ? 200 : 401);
+  }
+
+  // Garde des ops sensibles (actif uniquement si ADMIN_API_SECRET est défini).
+  if (ADMIN_SECRET && ADMIN_OPS.has(op) && req.headers.get('x-admin-secret') !== ADMIN_SECRET) {
+    return json({ success: false, error: 'Accès admin requis.' }, 401);
+  }
+
   // ── Register player (or login if exists) ──
   if (op === 'register') {
-    const { username, avatar } = body;
+    const { username, avatar, deviceToken } = body;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existingPlayer = db.prepare('SELECT * FROM players WHERE username = ?').get(username) as any;
     if (existingPlayer) {
-      db.prepare('UPDATE players SET avatar = ? WHERE id = ?').run(avatar, existingPlayer.id);
-      const player = db.prepare('SELECT * FROM players WHERE id = ?').get(existingPlayer.id);
-      broadcast('player_update', player);
-      return json({ player });
+      const stored = existingPlayer.device_token as string | null;
+      if (!stored) {
+        // Compte historique sans jeton : le premier navigateur qui revient l'adopte.
+        const token = deviceToken || crypto.randomUUID();
+        db.prepare('UPDATE players SET avatar = ?, device_token = ? WHERE id = ?').run(avatar, token, existingPlayer.id);
+        const player = db.prepare('SELECT * FROM players WHERE id = ?').get(existingPlayer.id);
+        broadcast('player_update', player);
+        return json({ player, deviceToken: token });
+      }
+      if (deviceToken && stored === deviceToken) {
+        // Reprise de session depuis le MÊME appareil → autorisée.
+        db.prepare('UPDATE players SET avatar = ? WHERE id = ?').run(avatar, existingPlayer.id);
+        const player = db.prepare('SELECT * FROM players WHERE id = ?').get(existingPlayer.id);
+        broadcast('player_update', player);
+        return json({ player, deviceToken: stored });
+      }
+      // Pseudo déjà pris par un autre appareil → refus (empêche le vol de compte/solde).
+      return json({ taken: true, error: 'Ce pseudo est déjà utilisé. Choisis-en un autre.' }, 409);
     }
 
     const id = 'user-' + crypto.randomUUID().slice(0, 8);
-    db.prepare(`INSERT INTO players (id,username,avatar,toiles_coins,total_winnings,successful_bets,total_bets,rank,rank_change,is_bot) VALUES (?,?,?,1000,0,0,0,99,'same',0)`)
-      .run(id, username, avatar);
+    const newToken = deviceToken || crypto.randomUUID();
+    db.prepare(`INSERT INTO players (id,username,avatar,toiles_coins,total_winnings,successful_bets,total_bets,rank,rank_change,is_bot,device_token) VALUES (?,?,?,1000,0,0,0,99,'same',0,?)`)
+      .run(id, username, avatar, newToken);
 
     // Initialize player missions
     const allMissions = db.prepare('SELECT id FROM missions').all() as { id: string }[];
@@ -217,7 +257,7 @@ export async function POST(req: NextRequest) {
 
     const player = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
     broadcast('player_update', player);
-    return json({ player });
+    return json({ player, deviceToken: newToken });
   }
 
   // ── Place bet ──
@@ -236,9 +276,14 @@ export async function POST(req: NextRequest) {
 
     const market = db.prepare('SELECT * FROM markets WHERE id = ?').get(marketId) as Record<string, unknown> | undefined;
     if (!market || !market.is_active || market.is_closed) return json({ success: false, error: 'Pari fermé.' });
+    // Pari flash : fenêtre de 5 min (closes_at). Passé ce délai, on refuse (l'admin peut aussi le geler).
+    if (market.is_flash && market.closes_at && new Date(market.closes_at as string).getTime() < Date.now())
+      return json({ success: false, error: 'Pari flash expiré.' });
 
     const outcome = db.prepare('SELECT * FROM outcomes WHERE id = ?').get(outcomeId) as Record<string, unknown> | undefined;
     if (!outcome) return json({ success: false, error: 'Option introuvable.' });
+    // Garde-fou serveur : une issue suspendue (cote ramenée à 0 par suspendImpossibleOutcomes) est refusée.
+    if (Number(outcome.current_odds) <= 1) return json({ success: false, error: 'Cote indisponible (issue suspendue).' });
 
     const betId = 'bet-' + crypto.randomUUID().slice(0, 8);
     db.prepare(`INSERT INTO bets (id,user_id,match_id,market_id,market_title,outcome_id,outcome_name,amount,odds_at_bet,status,payout) VALUES (?,?,?,?,?,?,?,?,?,'pending',0)`)
@@ -290,6 +335,27 @@ export async function POST(req: NextRequest) {
       if (p) broadcast('player_update', p);
     }
 
+    // Attribution des badges aux gagnants (Oracle Bleu, Visionnaire, Roi des Buteurs, Nostradamus).
+    const winnerIds = new Set(pendingBets.filter(b => b.outcome_id === outcomeId).map(b => b.user_id as string));
+    for (const uid of winnerIds) {
+      const newBadges = awardEarnedBadges(uid);
+      if (!newBadges.length) continue;
+      const pl = db.prepare('SELECT username FROM players WHERE id = ?').get(uid) as { username: string } | undefined;
+      for (const code of newBadges) {
+        const bd = db.prepare('SELECT title FROM badges WHERE code = ?').get(code) as { title: string } | undefined;
+        const subtitle = `${pl?.username || 'Un joueur'} débloque « ${bd?.title || code} » !`;
+        db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'badge', ?, ?)`)
+          .run(`ge-badge-${uid}-${code}-${Date.now()}`, getActiveMatchId(), 'NOUVEAU BADGE ! 🏅', subtitle);
+        broadcast('game_event', { type: 'badge', title: 'NOUVEAU BADGE ! 🏅', subtitle });
+      }
+      broadcast('player_update', db.prepare('SELECT * FROM players WHERE id = ?').get(uid));
+    }
+
+    // Mission « score exact » (cosmétique) : complétée pour les gagnants de ce marché.
+    if ((market as { type?: string } | undefined)?.type === 'exact_score') {
+      for (const uid of winnerIds) progressExactScoreMission(uid);
+    }
+
     // Recalculate ranking & broadcast leaderboard
     const players = db.prepare('SELECT * FROM players ORDER BY (toiles_coins + total_winnings) DESC').all() as any[];
     const updRank = db.prepare('UPDATE players SET rank = ?, rank_change = ? WHERE id = ?');
@@ -299,7 +365,7 @@ export async function POST(req: NextRequest) {
       const change = newRank < oldRank ? 'up' : newRank > oldRank ? 'down' : 'same';
       updRank.run(newRank, change, p.id);
     });
-    const updatedLeaderboard = db.prepare('SELECT * FROM players ORDER BY rank').all();
+    const updatedLeaderboard = getActiveLeaderboardPlayers(getActiveMatchId());
     broadcast('leaderboard_update', updatedLeaderboard);
 
     return json({ success: true });
@@ -309,8 +375,18 @@ export async function POST(req: NextRequest) {
   if (op === 'update_match') {
     const { stats } = body;
     const activeMatchId = getActiveMatchId();
-    const cols = Object.keys(stats).map(k => `${k} = ?`).join(', ');
-    db.prepare(`UPDATE matches SET ${cols} WHERE id = ?`).run(...Object.values(stats), activeMatchId);
+    if (!activeMatchId) return json({ success: false, error: 'Aucun match actif.' });
+    // Whitelist stricte des colonnes (les NOMS viennent du client → jamais interpolés sans contrôle).
+    const ALLOWED_MATCH_COLS = new Set([
+      'home_score', 'away_score', 'status', 'elapsed_time', 'possession_home',
+      'shots_on_target_home', 'corners_home', 'cards_home', 'shots_home', 'shots_away',
+      'shots_on_target_away', 'corners_away', 'cards_away', 'fouls_home', 'fouls_away',
+      'passes_accuracy_home', 'passes_accuracy_away',
+    ]);
+    const entries = Object.entries(stats as Record<string, unknown>).filter(([k]) => ALLOWED_MATCH_COLS.has(k));
+    if (!entries.length) return json({ success: false, error: 'Aucune colonne valide à mettre à jour.' });
+    const cols = entries.map(([k]) => `${k} = ?`).join(', ');
+    db.prepare(`UPDATE matches SET ${cols} WHERE id = ?`).run(...entries.map(([, v]) => v), activeMatchId);
 
     // Fin de match : on horodate finished_at (une seule fois) → déclenche le verrou des paris + le compte à rebours de 30 min.
     if (stats.status === 'finished') {
@@ -483,7 +559,7 @@ export async function POST(req: NextRequest) {
       const change = newRank < oldRank ? 'up' : newRank > oldRank ? 'down' : 'same';
       updRank.run(newRank, change, p.id);
     });
-    const updated = db.prepare('SELECT * FROM players ORDER BY rank').all();
+    const updated = getActiveLeaderboardPlayers(getActiveMatchId());
     broadcast('leaderboard_update', updated);
     return json({ success: true, leaderboard: updated });
   }
@@ -491,7 +567,11 @@ export async function POST(req: NextRequest) {
   // ── Unlock badge ──
   if (op === 'unlock_badge') {
     const { userId, badgeCode } = body;
-    db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_code) VALUES (?, ?)').run(userId, badgeCode);
+    const matchId = getActiveMatchId();
+    const wonBets = db.prepare("SELECT COUNT(*) as count FROM bets WHERE user_id = ? AND match_id = ? AND status = 'won'").get(userId, matchId) as { count: number };
+    if (wonBets.count > 0) {
+      db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_code) VALUES (?, ?)').run(userId, badgeCode);
+    }
     const badges = db.prepare('SELECT badge_code FROM player_badges WHERE player_id = ?').all(userId).map((r: any) => r.badge_code);
     const player = db.prepare('SELECT * FROM players WHERE id = ?').get(userId);
     broadcast('player_update', player);
@@ -522,14 +602,18 @@ export async function POST(req: NextRequest) {
 
         // Award badge if any
         if (pm.reward_badge_code) {
-          db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_code) VALUES (?, ?)').run(userId, pm.reward_badge_code);
-          const badgeDetails = db.prepare('SELECT * FROM badges WHERE code = ?').get(pm.reward_badge_code) as any;
-          
-          broadcast('game_event', {
-            type: 'badge',
-            title: 'BADGE DÉBLOQUÉ ! 🏅',
-            subtitle: `Badge "${badgeDetails?.title || pm.reward_badge_code.toUpperCase()}" débloqué !`
-          });
+          const matchId = getActiveMatchId();
+          const wonBets = db.prepare("SELECT COUNT(*) as count FROM bets WHERE user_id = ? AND match_id = ? AND status = 'won'").get(userId, matchId) as { count: number };
+          if (wonBets.count > 0) {
+            db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_code) VALUES (?, ?)').run(userId, pm.reward_badge_code);
+            const badgeDetails = db.prepare('SELECT * FROM badges WHERE code = ?').get(pm.reward_badge_code) as any;
+            
+            broadcast('game_event', {
+              type: 'badge',
+              title: 'BADGE DÉBLOQUÉ ! 🏅',
+              subtitle: `Badge "${badgeDetails?.title || pm.reward_badge_code.toUpperCase()}" débloqué !`
+            });
+          }
         }
       }
     }
@@ -691,6 +775,8 @@ export async function POST(req: NextRequest) {
         insO.run(oc.id, mkt.id, oc.name, oddVal, oddVal, oc.oddsSource || 'default');
       }
     }
+
+    suspendImpossibleOutcomes(matchId, match.homeScore ?? 0, match.awayScore ?? 0);
 
     // Récupérer le nouvel état complet
     const activeMatch = db.prepare('SELECT * FROM matches WHERE id = ?').get(matchId);

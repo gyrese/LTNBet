@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, Market, Outcome } from '@/lib/store';
@@ -22,28 +22,22 @@ export default function HomePage() {
   const matchFinished = match.status === 'finished';
   const bettingOpen = hasActiveMatch && !matchFinished;
 
-  // Selected bet state
   const [selectedMarket, setSelectedMarket] = useState<Market | null>(null);
   const [selectedOutcome, setSelectedOutcome] = useState<Outcome | null>(null);
   const [betAmount, setBetAmount] = useState<number>(100);
   const [betStatusMsg, setBetStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
-    if (mounted && !currentUser) {
-      router.push('/join');
-    }
+    if (mounted && !currentUser) router.push('/join');
   }, [currentUser, router, mounted]);
 
   if (!mounted || !currentUser) return null;
 
-  // ── Écran d'attente : aucun match lancé par l'hôte ──
+  /* ── Écran d'attente ── */
   if (!hasActiveMatch) {
     return (
       <div className="min-h-dvh flex flex-col text-on-surface pb-28 md:pb-12 pt-24">
@@ -56,12 +50,16 @@ export default function HomePage() {
             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
             className="glass-strong gradient-border rounded-3xl p-10 md:p-14 text-center max-w-lg w-full relative overflow-hidden"
           >
-            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 bg-secondary-container/15 blur-3xl rounded-full pointer-events-none" />
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full pointer-events-none blur-3xl"
+              style={{ background: 'rgba(123,97,255,0.15)' }} />
             <div className="relative z-10 flex flex-col items-center gap-5">
-              <div className="w-20 h-20 rounded-3xl bg-secondary-container/15 border border-white/10 flex items-center justify-center animate-float">
+              <div
+                className="w-20 h-20 rounded-3xl flex items-center justify-center animate-float border border-white/10"
+                style={{ background: 'rgba(123,97,255,0.12)' }}
+              >
                 <span className="material-symbols-outlined text-[44px] text-primary">stadium</span>
               </div>
-              <h1 className="font-display-hero text-[30px] md:text-[38px] tracking-tighter bg-gradient-to-r from-white via-primary to-white bg-clip-text text-transparent leading-none">
+              <h1 className="font-headline-lg text-[36px] md:text-[44px] bg-gradient-to-r from-home via-primary to-away bg-clip-text text-transparent leading-none">
                 Aucun match en cours
               </h1>
               <p className="font-body-md text-on-surface-variant text-[14px] max-w-sm">
@@ -123,24 +121,41 @@ export default function HomePage() {
 
       <main className="flex-grow w-full max-w-container-max mx-auto px-4 md:px-16 py-6 flex flex-col gap-6">
 
-        {/* ============ MATCH HERO ============ */}
+        {/* ============ MATCH HERO — split orange/blue ============ */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           className="glass-panel gradient-border rounded-3xl overflow-hidden relative"
         >
-          {/* Pitch glow + crest backdrop */}
-          <div className="absolute inset-0 z-0 bg-gradient-to-b from-secondary-container/20 via-transparent to-transparent" />
-          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[420px] h-[220px] bg-secondary-container/25 blur-[90px] rounded-full pointer-events-none" />
+          {/* HOME ambient glow — left orange */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(ellipse 55% 80% at 0% 50%, rgba(255,80,0,0.14), transparent 60%)',
+            }}
+          />
+          {/* AWAY ambient glow — right blue */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(ellipse 55% 80% at 100% 50%, rgba(26,143,255,0.14), transparent 60%)',
+            }}
+          />
 
           <div className="relative z-10 p-6 md:p-8 flex flex-col items-center">
-            {/* Top bar: competition + live */}
+            {/* Status bar */}
             <div className="flex items-center justify-between w-full mb-6">
-              <span className="font-label-caps text-[10px] text-on-surface-variant/70 tracking-[0.2em] hidden sm:block">
+              <span className="font-label-caps text-[10px] text-on-surface-variant/60 tracking-[0.2em] hidden sm:block">
                 LES TOILES NOIRES · STADIUM LIVE
               </span>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-error/12 border border-error/30">
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+                style={{
+                  background: match.status === 'live' ? 'rgba(255,80,0,0.12)' : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${match.status === 'live' ? 'rgba(255,80,0,0.30)' : 'rgba(255,255,255,0.10)'}`,
+                }}
+              >
                 {match.status === 'live' && <span className="live-dot" />}
                 <span className="font-label-caps text-[11px] text-on-surface tracking-widest uppercase tabular">
                   {statusLabel[match.status]}
@@ -152,51 +167,80 @@ export default function HomePage() {
             <div className="flex items-center justify-between w-full max-w-xl mx-auto gap-2">
               {/* Home */}
               <div className="flex flex-col items-center gap-3 flex-1">
-                <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-surface-container/80 flex items-center justify-center border border-white/10 text-4xl md:text-5xl shadow-[0_8px_24px_-8px_rgba(0,0,0,0.7)]">
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-secondary-container/20 to-transparent" />
+                <div
+                  className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-4xl md:text-5xl border"
+                  style={{
+                    background: 'rgba(255,80,0,0.10)',
+                    borderColor: 'rgba(255,80,0,0.20)',
+                    boxShadow: '0 8px 24px -8px rgba(255,80,0,0.25)',
+                  }}
+                >
                   <span className="relative">{flagFor(match.homeTeam)}</span>
                 </div>
-                <span className="font-headline-lg-mobile text-[16px] md:text-[20px] text-white text-center leading-tight">
+                <span
+                  className="font-body-md text-[16px] md:text-[20px] font-bold text-center leading-tight"
+                  style={{ color: '#FF6B20' }}
+                >
                   {match.homeTeam}
                 </span>
               </div>
 
               {/* Score */}
-              <div className="flex flex-col items-center gap-2 px-2">
-                <div className="font-score-display text-[44px] md:text-[64px] text-white leading-none flex items-center gap-2 md:gap-3">
-                  <span className="text-glow-blue text-primary">{match.homeScore}</span>
-                  <span className="text-on-surface-variant/40 text-[28px] md:text-[40px]">:</span>
-                  <span className="text-white">{match.awayScore}</span>
+              <div className="flex flex-col items-center gap-1 px-2">
+                <div className="font-score-display text-[48px] md:text-[72px] text-white leading-none flex items-center gap-2 md:gap-3">
+                  <span style={{ color: '#FF6B20', textShadow: '0 0 24px rgba(255,80,0,0.55)' }}>
+                    {match.homeScore}
+                  </span>
+                  <span className="text-on-surface-variant/30 text-[28px] md:text-[40px]">—</span>
+                  <span style={{ color: '#4DA8FF', textShadow: '0 0 24px rgba(26,143,255,0.55)' }}>
+                    {match.awayScore}
+                  </span>
                 </div>
               </div>
 
               {/* Away */}
               <div className="flex flex-col items-center gap-3 flex-1">
-                <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-surface-container/80 flex items-center justify-center border border-white/10 text-4xl md:text-5xl shadow-[0_8px_24px_-8px_rgba(0,0,0,0.7)]">
+                <div
+                  className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-4xl md:text-5xl border"
+                  style={{
+                    background: 'rgba(26,143,255,0.10)',
+                    borderColor: 'rgba(26,143,255,0.20)',
+                    boxShadow: '0 8px 24px -8px rgba(26,143,255,0.25)',
+                  }}
+                >
                   <span className="relative">{flagFor(match.awayTeam)}</span>
                 </div>
-                <span className="font-headline-lg-mobile text-[16px] md:text-[20px] text-on-surface-variant text-center leading-tight">
+                <span
+                  className="font-body-md text-[16px] md:text-[20px] font-bold text-center leading-tight"
+                  style={{ color: '#4DA8FF' }}
+                >
                   {match.awayTeam}
                 </span>
               </div>
             </div>
 
-            {/* Match progress */}
+            {/* Match progress bar */}
             {(match.status === 'live' || match.status === 'half_time') && (
               <div className="w-full max-w-md mx-auto mt-7">
-                <div className="h-1.5 w-full bg-white/8 rounded-full overflow-hidden relative">
+                <div className="h-1.5 w-full rounded-full overflow-hidden relative" style={{ background: 'rgba(255,255,255,0.07)' }}>
                   <motion.div
-                    className="h-full bg-gradient-to-r from-secondary-container to-primary rounded-full relative"
+                    className="h-full rounded-full relative"
+                    style={{
+                      background: 'linear-gradient(90deg, #FF5000, #7B61FF, #1A8FFF)',
+                    }}
                     initial={{ width: 0 }}
                     animate={{ width: `${matchProgress}%` }}
                     transition={{ duration: 0.8, ease: 'easeOut' }}
                   >
-                    <span className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)]" />
+                    <span
+                      className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white"
+                      style={{ background: '#7B61FF', boxShadow: '0 0 10px rgba(123,97,255,0.9)' }}
+                    />
                   </motion.div>
                 </div>
-                <div className="flex justify-between mt-2 font-data-mono text-[10px] text-on-surface-variant/60">
+                <div className="flex justify-between mt-2 font-data-mono text-[10px] text-on-surface-variant/55">
                   <span>{"0'"}</span>
-                  <span className="text-primary">{`${match.elapsedTime}'`}</span>
+                  <span style={{ color: '#7B61FF' }}>{`${match.elapsedTime}'`}</span>
                   <span>{"90'"}</span>
                 </div>
               </div>
@@ -214,13 +258,17 @@ export default function HomePage() {
               <motion.div
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="relative overflow-hidden rounded-2xl border border-error/40 bg-gradient-to-r from-error/15 via-error/8 to-error/15 p-4 flex items-center justify-center gap-3 text-center"
+                className="relative overflow-hidden rounded-2xl p-4 flex items-center justify-center gap-3 text-center"
+                style={{
+                  background: 'linear-gradient(90deg, rgba(255,59,71,0.14), rgba(255,59,71,0.07), rgba(255,59,71,0.14))',
+                  border: '1px solid rgba(255,59,71,0.35)',
+                }}
               >
                 <span className="material-symbols-outlined text-error text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>
                   sports_score
                 </span>
-                <span className="font-headline-lg-mobile text-[15px] md:text-[16px] text-white tracking-tight">
-                  MATCH TERMINÉ · LES PARIS SONT FERMÉS — Consultez les résultats ci-dessous
+                <span className="font-headline-lg-mobile text-[15px] md:text-[16px] text-white">
+                  MATCH TERMINÉ · LES PARIS SONT FERMÉS — Consultez les résultats
                 </span>
               </motion.div>
             )}
@@ -229,9 +277,13 @@ export default function HomePage() {
               <motion.div
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="shimmer relative overflow-hidden rounded-2xl border border-tertiary/40 bg-gradient-to-r from-tertiary/15 via-tertiary/8 to-tertiary/15 p-4 text-center"
+                className="shimmer relative overflow-hidden rounded-2xl p-4 text-center"
+                style={{
+                  background: 'linear-gradient(90deg, rgba(255,184,0,0.14), rgba(255,184,0,0.07), rgba(255,184,0,0.14))',
+                  border: '1px solid rgba(255,184,0,0.35)',
+                }}
               >
-                <span className="relative z-10 font-headline-lg-mobile text-[16px] text-tertiary tracking-tight">
+                <span className="relative z-10 font-headline-lg-mobile text-[16px] text-tertiary">
                   🚀 MODE DOUBLE GAINS · TOUTES LES COTES ×2
                 </span>
               </motion.div>
@@ -247,18 +299,33 @@ export default function HomePage() {
               >
                 <div className="flex justify-between items-center mb-4">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-1 h-5 rounded-full bg-gradient-to-b from-primary to-secondary-container" />
-                    <h2 className="font-label-caps text-label-caps text-on-surface tracking-widest">
+                    <span
+                      className="w-1 h-5 rounded-full"
+                      style={{ background: 'linear-gradient(180deg, #FF5000, #7B61FF)' }}
+                    />
+                    <h2 className="font-label-caps text-on-surface tracking-widest">
                       {market.title}
                     </h2>
                     {market.isFlash && (
-                      <span className="font-label-caps text-[9px] text-tertiary bg-tertiary/12 border border-tertiary/30 px-2 py-0.5 rounded-full">
+                      <span
+                        className="font-label-caps text-[9px] text-tertiary px-2 py-0.5 rounded-full"
+                        style={{
+                          background: 'rgba(255,184,0,0.10)',
+                          border: '1px solid rgba(255,184,0,0.28)',
+                        }}
+                      >
                         FLASH
                       </span>
                     )}
                   </div>
                   {market.isClosed && (
-                    <span className="bg-surface-container-high text-on-surface-variant font-label-caps text-[9px] px-2.5 py-1 rounded-full border border-white/8">
+                    <span
+                      className="font-label-caps text-[9px] text-on-surface-variant px-2.5 py-1 rounded-full"
+                      style={{
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                      }}
+                    >
                       CLOS
                     </span>
                   )}
@@ -277,13 +344,30 @@ export default function HomePage() {
                         onClick={() => handleOutcomeClick(market, outcome)}
                         disabled={!bettingOpen || market.isClosed || !market.isActive || outcome.currentOdds === 0}
                         className={`group relative overflow-hidden rounded-xl p-3.5 flex flex-col gap-2 text-left transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
+                          (market.isClosed || !bettingOpen || outcome.currentOdds === 0)
+                            ? 'opacity-30 cursor-not-allowed'
+                            : ''
+                        }`}
+                        style={
                           isSelected
-                            ? 'bg-secondary-container/15 border border-primary/50 glow-accent'
-                            : 'bg-white/[0.03] border border-white/8 hover:bg-white/[0.06] hover:border-white/15 hover:-translate-y-0.5'
-                        } ${(market.isClosed || !bettingOpen || outcome.currentOdds === 0) ? 'opacity-30 cursor-not-allowed hover:translate-y-0' : ''}`}
+                            ? {
+                                background: 'linear-gradient(135deg, rgba(123,97,255,0.18) 0%, rgba(123,97,255,0.06) 100%)',
+                                border: '1px solid rgba(123,97,255,0.55)',
+                                boxShadow: '0 0 20px rgba(123,97,255,0.22), inset 0 1px 0 rgba(255,255,255,0.06)',
+                                transform: 'translateY(-1px)',
+                              }
+                            : {
+                                background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid rgba(255,255,255,0.07)',
+                              }
+                        }
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className={`font-body-md text-[14px] leading-tight ${isSelected ? 'text-white font-semibold' : 'text-on-surface'} ${outcome.currentOdds === 0 ? 'line-through text-on-surface-variant/40' : ''}`}>
+                          <span
+                            className={`font-body-md text-[14px] leading-tight ${
+                              isSelected ? 'text-white font-semibold' : 'text-on-surface'
+                            } ${outcome.currentOdds === 0 ? 'line-through text-on-surface-variant/40' : ''}`}
+                          >
                             {outcome.name}
                           </span>
                         </div>
@@ -293,19 +377,27 @@ export default function HomePage() {
                               Suspendu
                             </span>
                           ) : (
-                            <span className={`font-data-mono text-[16px] font-bold tabular ${isSelected ? 'text-primary' : 'text-tertiary'}`}>
+                            <span
+                              className="font-data-mono text-[18px] font-bold tabular"
+                              style={{ color: isSelected ? '#9278FF' : '#FFB800' }}
+                            >
                               {displayOdds.toFixed(2)}
                             </span>
                           )}
-                          <span className="font-data-mono text-[9px] text-on-surface-variant/45 tabular">
+                          <span className="font-data-mono text-[9px] text-on-surface-variant/40 tabular">
                             {share}%
                           </span>
                         </div>
-                        {/* pool share bar */}
-                        <div className="h-1 w-full bg-white/6 rounded-full overflow-hidden">
+                        {/* Pool share bar */}
+                        <div className="h-1 w-full rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${isSelected ? 'bg-primary' : 'bg-secondary-container/60'}`}
-                            style={{ width: `${share}%` }}
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${share}%`,
+                              background: isSelected
+                                ? 'linear-gradient(90deg, #7B61FF, #9278FF)'
+                                : 'rgba(123,97,255,0.45)',
+                            }}
                           />
                         </div>
                       </button>
@@ -319,15 +411,24 @@ export default function HomePage() {
           {/* RIGHT: bet slip + stats */}
           <div className="lg:col-span-4 flex flex-col gap-5 lg:sticky lg:top-24">
 
-            {/* Bet slip — desktop only (mobile uses the bottom sheet) */}
+            {/* Bet slip — desktop */}
             <section className="glass-strong rounded-2xl p-5 md:p-6 hidden lg:flex flex-col relative overflow-hidden">
-              <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
-                <h2 className="font-label-caps text-label-caps text-on-surface flex items-center gap-2 tracking-widest">
+              <div
+                className="flex items-center justify-between border-b pb-4 mb-4"
+                style={{ borderColor: 'rgba(123,97,255,0.15)' }}
+              >
+                <h2 className="font-label-caps text-on-surface flex items-center gap-2 tracking-widest">
                   <span className="material-symbols-outlined text-[18px] text-primary">receipt_long</span>
                   MON PARI
                 </h2>
                 {selectedOutcome && (
-                  <span className="bg-secondary-container text-white font-label-caps text-[9px] px-2.5 py-1 rounded-full">
+                  <span
+                    className="font-label-caps text-[9px] text-primary px-2.5 py-1 rounded-full"
+                    style={{
+                      background: 'rgba(123,97,255,0.14)',
+                      border: '1px solid rgba(123,97,255,0.30)',
+                    }}
+                  >
                     1 SÉLECTION
                   </span>
                 )}
@@ -361,9 +462,9 @@ export default function HomePage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="text-center py-10 text-on-surface-variant/45 font-body-md flex flex-col items-center justify-center gap-3"
+                    className="text-center py-10 text-on-surface-variant/40 font-body-md flex flex-col items-center justify-center gap-3"
                   >
-                    <span className="material-symbols-outlined text-[44px] opacity-40">touch_app</span>
+                    <span className="material-symbols-outlined text-[44px] opacity-30">touch_app</span>
                     <span className="text-[14px] max-w-[16rem]">Sélectionnez une cote à gauche pour composer votre pari.</span>
                   </motion.div>
                 )}
@@ -386,24 +487,23 @@ export default function HomePage() {
 
             {/* Live stats */}
             <section className="glass-panel rounded-2xl p-5 md:p-6">
-              <h2 className="font-label-caps text-label-caps text-on-surface-variant mb-5 flex items-center gap-2 tracking-widest">
+              <h2 className="font-label-caps text-on-surface-variant mb-5 flex items-center gap-2 tracking-widest">
                 <span className="material-symbols-outlined text-[18px] text-primary">monitoring</span>
                 STATS DU MATCH
               </h2>
-
               <div className="space-y-5">
                 <StatBar label="POSSESSION" left={`${match.possessionHome}%`} right={`${100 - match.possessionHome}%`} pct={match.possessionHome} />
                 <StatBar
                   label="TIRS CADRÉS"
                   left={`${match.shotsOnTargetHome}`}
-                  right="2"
-                  pct={(match.shotsOnTargetHome / (match.shotsOnTargetHome + 2)) * 100}
+                  right={`${match.shotsOnTargetAway}`}
+                  pct={(match.shotsOnTargetHome / ((match.shotsOnTargetHome + match.shotsOnTargetAway) || 1)) * 100}
                 />
                 <StatBar
                   label="CORNERS"
                   left={`${match.cornersHome}`}
-                  right="3"
-                  pct={(match.cornersHome / (match.cornersHome + 3)) * 100}
+                  right={`${match.cornersAway}`}
+                  pct={(match.cornersHome / ((match.cornersHome + match.cornersAway) || 1)) * 100}
                 />
               </div>
             </section>
@@ -415,7 +515,6 @@ export default function HomePage() {
       <AnimatePresence>
         {selectedOutcome && selectedMarket && (
           <>
-            {/* Backdrop */}
             <motion.div
               key="sheet-backdrop"
               initial={{ opacity: 0 }}
@@ -423,31 +522,47 @@ export default function HomePage() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={clearSelection}
-              className="lg:hidden fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
+              className="lg:hidden fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm"
             />
 
-            {/* Sheet */}
             <motion.div
               key="sheet"
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 360, damping: 36 }}
-              className="lg:hidden fixed inset-x-0 bottom-0 z-[61] glass-strong rounded-t-3xl border-t border-white/10 shadow-[0_-20px_40px_-20px_rgba(0,0,0,0.9)] px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] max-h-[88vh] overflow-y-auto"
+              className="lg:hidden fixed inset-x-0 bottom-0 z-[61] rounded-t-3xl border-t px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] max-h-[88vh] overflow-y-auto"
+              style={{
+                background: 'linear-gradient(160deg, rgba(20,20,60,0.98) 0%, rgba(10,10,30,0.99) 100%)',
+                borderColor: 'rgba(123,97,255,0.22)',
+                boxShadow: '0 -20px 50px -10px rgba(123,97,255,0.18), 0 -30px 60px -20px rgba(0,0,0,0.9)',
+                backdropFilter: 'blur(28px)',
+                WebkitBackdropFilter: 'blur(28px)',
+              }}
             >
               {/* Drag handle */}
-              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-white/20" />
+              <div
+                className="mx-auto mb-4 h-1.5 w-12 rounded-full"
+                style={{ background: 'rgba(123,97,255,0.35)' }}
+              />
 
               {/* Header */}
-              <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
-                <h2 className="font-label-caps text-label-caps text-on-surface flex items-center gap-2 tracking-widest">
+              <div
+                className="flex items-center justify-between border-b pb-3 mb-4"
+                style={{ borderColor: 'rgba(123,97,255,0.15)' }}
+              >
+                <h2 className="font-label-caps text-on-surface flex items-center gap-2 tracking-widest">
                   <span className="material-symbols-outlined text-[18px] text-primary">receipt_long</span>
                   MON PARI
                 </h2>
                 <button
                   onClick={clearSelection}
                   aria-label="Fermer"
-                  className="w-8 h-8 rounded-full bg-white/[0.06] border border-white/10 flex items-center justify-center text-on-surface-variant hover:bg-white/10 transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-white transition-colors cursor-pointer"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                  }}
                 >
                   <span className="material-symbols-outlined text-[18px]">close</span>
                 </button>
@@ -486,6 +601,7 @@ export default function HomePage() {
   );
 }
 
+/* ============ BET SLIP BODY ============ */
 function BetSlipBody({
   selectedMarket,
   selectedOutcome,
@@ -509,8 +625,14 @@ function BetSlipBody({
 }) {
   return (
     <div className="space-y-5">
-      {/* Pari sélectionné + cote */}
-      <div className="flex justify-between items-start gap-3 bg-white/[0.03] rounded-xl p-3 border border-white/8">
+      {/* Selected bet + odds */}
+      <div
+        className="flex justify-between items-start gap-3 rounded-xl p-3"
+        style={{
+          background: 'rgba(123,97,255,0.06)',
+          border: '1px solid rgba(123,97,255,0.18)',
+        }}
+      >
         <div>
           <span className="block font-body-md text-white font-semibold text-[15px] leading-tight">
             {selectedOutcome.name}
@@ -519,7 +641,13 @@ function BetSlipBody({
             {selectedMarket.title}
           </span>
         </div>
-        <span className="font-data-mono text-tertiary font-bold bg-tertiary/10 px-2.5 py-1 rounded-lg border border-tertiary/25 tabular shrink-0">
+        <span
+          className="font-data-mono font-bold px-2.5 py-1 rounded-lg tabular shrink-0 text-tertiary"
+          style={{
+            background: 'rgba(255,184,0,0.10)',
+            border: '1px solid rgba(255,184,0,0.25)',
+          }}
+        >
           {(selectedOutcome.currentOdds * (doubleGainsActive ? 2 : 1)).toFixed(2)}
         </span>
       </div>
@@ -539,19 +667,29 @@ function BetSlipBody({
           step={10}
           value={betAmount}
           onChange={(e) => setBetAmount(Number(e.target.value))}
-          className="w-full h-1.5 bg-white/15 rounded-lg appearance-none cursor-pointer focus:outline-none"
+          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer focus:outline-none"
+          style={{ background: 'rgba(255,255,255,0.15)' }}
         />
         <div className="flex justify-between gap-1.5">
-          {[10, 50, 100, 250].map((amt) => (
+          {[50, 100, 250, 500].map((amt) => (
             <button
               key={amt}
               onClick={() => setBetAmount(Math.min(maxCoins, amt))}
               disabled={maxCoins < amt}
-              className={`flex-1 py-1.5 rounded-lg font-data-mono text-[11px] text-center border transition-all cursor-pointer tabular ${
+              className="flex-1 py-1.5 rounded-lg font-data-mono text-[11px] text-center transition-all cursor-pointer tabular"
+              style={
                 betAmount === amt
-                  ? 'bg-secondary-container/20 border-primary/50 text-primary'
-                  : 'bg-white/[0.03] border-white/10 text-on-surface-variant/70 hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed'
-              }`}
+                  ? {
+                      background: 'rgba(123,97,255,0.18)',
+                      border: '1px solid rgba(123,97,255,0.45)',
+                      color: '#9278FF',
+                    }
+                  : {
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      color: 'rgba(200,200,255,0.5)',
+                    }
+              }
             >
               {amt}
             </button>
@@ -559,12 +697,21 @@ function BetSlipBody({
         </div>
       </div>
 
-      {/* Gain potentiel */}
-      <div className="flex justify-between items-center bg-gradient-to-r from-tertiary/12 to-transparent p-4 rounded-xl border border-tertiary/20">
+      {/* Gain potentiel — orange energy */}
+      <div
+        className="flex justify-between items-center p-4 rounded-xl"
+        style={{
+          background: 'linear-gradient(135deg, rgba(255,80,0,0.10) 0%, rgba(123,97,255,0.06) 100%)',
+          border: '1px solid rgba(255,80,0,0.20)',
+        }}
+      >
         <span className="font-label-caps text-[10px] text-on-surface tracking-wider">GAIN POTENTIEL</span>
-        <span className="font-score-display text-[22px] text-tertiary text-glow tabular">
+        <span
+          className="font-score-display text-[28px] tabular"
+          style={{ color: '#FFB800', textShadow: '0 0 20px rgba(255,184,0,0.55)' }}
+        >
           {potentialPayout.toLocaleString()}
-          <span className="text-[12px] ml-1 text-tertiary/70">TC</span>
+          <span className="text-[13px] ml-1 opacity-70">TC</span>
         </span>
       </div>
 
@@ -582,18 +729,22 @@ function BetSlipBody({
   );
 }
 
+/* ============ STAT BAR ============ */
 function StatBar({ label, left, right, pct }: { label: string; left: string; right: string; pct: number }) {
   return (
     <div>
       <div className="flex justify-between items-center font-data-mono text-[13px] text-on-surface mb-1.5">
-        <span className="text-primary font-bold tabular">{left}</span>
+        <span className="font-bold tabular" style={{ color: '#FF6B20' }}>{left}</span>
         <span className="font-label-caps text-[9px] text-on-surface-variant tracking-widest">{label}</span>
-        <span className="text-on-surface-variant tabular">{right}</span>
+        <span className="text-on-surface-variant tabular" style={{ color: '#4DA8FF' }}>{right}</span>
       </div>
-      <div className="h-2 w-full bg-white/8 rounded-full overflow-hidden flex">
+      <div className="h-2 w-full rounded-full overflow-hidden flex" style={{ background: 'rgba(255,255,255,0.07)' }}>
         <div
-          className="h-full bg-gradient-to-r from-secondary-container to-primary rounded-full transition-all duration-500"
-          style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
+          className="h-full rounded-full transition-all duration-500"
+          style={{
+            width: `${Math.max(2, Math.min(100, pct))}%`,
+            background: 'linear-gradient(90deg, #FF5000, #7B61FF)',
+          }}
         />
       </div>
     </div>

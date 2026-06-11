@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { broadcast } from './sse-bus';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -180,12 +181,17 @@ try {
 // pour l'enrichissement des stats live.
 try { db.exec('ALTER TABLE matches ADD COLUMN odds_event_id TEXT;'); } catch { /* exists */ }
 try { db.exec('ALTER TABLE matches ADD COLUMN apifs_id TEXT;'); } catch { /* exists */ }
+// ID Football-Data.org — auto-découvert au 1er sync (fallback score/statut si odds-api indispo).
+try { db.exec('ALTER TABLE matches ADD COLUMN fd_match_id TEXT;'); } catch { /* exists */ }
 
 // Provenance de la cote de chaque outcome : 'api' | 'default' | 'manual' (badge admin).
 try { db.exec("ALTER TABLE outcomes ADD COLUMN odds_source TEXT DEFAULT 'default';"); } catch { /* exists */ }
 
 // Présence : dernière activité d'un joueur (heartbeat) pour le comptage des connectés et le timeout.
 try { db.exec('ALTER TABLE players ADD COLUMN last_seen TEXT;'); } catch { /* exists */ }
+
+// Jeton d'appareil : lie un pseudo au navigateur qui l'a créé → empêche la prise de compte (AV-1).
+try { db.exec('ALTER TABLE players ADD COLUMN device_token TEXT;'); } catch { /* exists */ }
 
 // Nouvelles colonnes de statistiques détaillées pour les deux équipes
 try { db.exec('ALTER TABLE matches ADD COLUMN shots_home INTEGER DEFAULT 0;'); } catch { /* exists */ }
@@ -200,6 +206,8 @@ try { db.exec('ALTER TABLE matches ADD COLUMN passes_accuracy_away INTEGER DEFAU
 
 // Seed bots (joueurs fictifs du classement) si la table est vide.
 // NB : aucun match de démo n'est créé — l'hôte lance lui-même la session depuis /admin.
+// Desactive pour arreter d'inserer des bots
+/*
 const botCount = db.prepare('SELECT COUNT(*) as count FROM players WHERE is_bot = 1').get() as { count: number };
 if (botCount.count === 0) {
   const bots = [
@@ -217,6 +225,8 @@ if (botCount.count === 0) {
   const insP = db.prepare(`INSERT INTO players (id,username,avatar,toiles_coins,total_winnings,successful_bets,total_bets,rank,rank_change,is_bot) VALUES (?,?,?,?,?,?,?,?,?,1)`);
   for (const p of bots) insP.run(...p);
 }
+*/
+
 
 // Seed badges if empty
 const badgeCount = db.prepare('SELECT COUNT(*) as count FROM badges').get() as { count: number };
@@ -249,15 +259,17 @@ if (rewardCount.count === 0) {
 }
 
 export function suspendImpossibleOutcomes(matchId: string, homeScore: number, awayScore: number) {
-  // 1. Get all markets for this match
-  const markets = db.prepare('SELECT id, type FROM markets WHERE match_id = ?').all(matchId) as { id: string; type: string }[];
-  
+  // On ne touche pas aux marchés déjà résolus/gelés.
+  const markets = db.prepare('SELECT id, type FROM markets WHERE match_id = ? AND is_closed = 0').all(matchId) as { id: string; type: string }[];
+
   for (const market of markets) {
-    const outcomes = db.prepare('SELECT id, name FROM outcomes WHERE market_id = ?').all(market.id) as { id: string; name: string }[];
-    
+    const outcomes = db.prepare('SELECT id, name, current_odds, base_odds FROM outcomes WHERE market_id = ?').all(market.id) as
+      { id: string; name: string; current_odds: number; base_odds: number }[];
+
+    let changed = false;
     for (const outcome of outcomes) {
       let isImpossible = false;
-      
+
       if (market.type === 'exact_score' || market.type === 'halftime_score') {
         const parts = outcome.name.split('-');
         if (parts.length === 2) {
@@ -269,24 +281,104 @@ export function suspendImpossibleOutcomes(matchId: string, homeScore: number, aw
             }
           }
         }
-      } 
+      }
       else if (market.type === 'over_under_25') {
         const totalGoals = homeScore + awayScore;
         if (totalGoals > 2.5 && outcome.name === 'Non') {
           isImpossible = true;
         }
-      } 
+      }
       else if (market.type === 'btts') {
         if (homeScore > 0 && awayScore > 0 && outcome.name === 'Non') {
           isImpossible = true;
         }
       }
-      
+
       if (isImpossible) {
-        db.prepare('UPDATE outcomes SET current_odds = 0 WHERE id = ?').run(outcome.id);
+        // Suspendre (cote → 0) si ce n'est pas déjà fait.
+        if (outcome.current_odds !== 0) {
+          db.prepare('UPDATE outcomes SET current_odds = 0 WHERE id = ?').run(outcome.id);
+          changed = true;
+        }
+      } else if (outcome.current_odds === 0) {
+        // RESTAURATION : l'issue était suspendue mais est redevenue possible (but annulé par la VAR,
+        // correction d'un score saisi par erreur…). On rétablit la cote de base ; le prochain pari
+        // recalculera les cotes dynamiques du marché. Seule cette fonction met une cote à 0 → sûr.
+        db.prepare('UPDATE outcomes SET current_odds = ? WHERE id = ?').run(outcome.base_odds, outcome.id);
+        changed = true;
       }
     }
+
+    // Pousser les changements aux clients en direct (boutons grisés / réactivés immédiatement).
+    if (changed) {
+      const updated = db.prepare('SELECT * FROM outcomes WHERE market_id = ?').all(market.id);
+      broadcast('outcomes_update', { marketId: market.id, outcomes: updated });
+    }
   }
+}
+
+/**
+ * Attribue à un joueur les badges qu'il a mérités, calculés depuis ses paris GAGNÉS.
+ * Règle anti-triche respectée : aucun badge si le joueur n'a aucun pari gagné.
+ * Couvre 4 badges (le 5e, « legende » = top 1 du classement, est géré côté store).
+ * @returns la liste des codes de badges NOUVELLEMENT débloqués (pour notifier l'écran).
+ */
+export function awardEarnedBadges(userId: string): string[] {
+  // Paris gagnés du joueur, avec le type de marché (pour Visionnaire / Roi des Buteurs).
+  const won = db
+    .prepare(
+      `SELECT b.status, m.type AS market_type
+       FROM bets b JOIN markets m ON b.market_id = m.id
+       WHERE b.user_id = ? AND b.status = 'won'`,
+    )
+    .all(userId) as { status: string; market_type: string }[];
+
+  if (won.length === 0) return [];
+
+  const owned = new Set(
+    (db.prepare('SELECT badge_code FROM player_badges WHERE player_id = ?').all(userId) as { badge_code: string }[])
+      .map((r) => r.badge_code),
+  );
+  const newly: string[] = [];
+  const give = (code: string) => {
+    if (owned.has(code)) return;
+    db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_code) VALUES (?, ?)').run(userId, code);
+    owned.add(code);
+    newly.push(code);
+  };
+
+  // Oracle Bleu : 10 bons paris au total.
+  if (won.length >= 10) give('oracle_bleu');
+  // Visionnaire : un score exact trouvé (pari gagné sur le marché score exact).
+  if (won.some((b) => b.market_type === 'exact_score')) give('visionnaire');
+  // Roi des Buteurs : 5 paris « premier buteur » gagnés.
+  if (won.filter((b) => b.market_type === 'first_scorer').length >= 5) give('roi_buteurs');
+
+  // Nostradamus : 5 paris gagnés CONSÉCUTIFS (sur l'ordre chronologique de tous les paris résolus).
+  const resolved = db
+    .prepare("SELECT status FROM bets WHERE user_id = ? AND status IN ('won','lost') ORDER BY created_at")
+    .all(userId) as { status: string }[];
+  let streak = 0;
+  let best = 0;
+  for (const b of resolved) {
+    if (b.status === 'won') { streak++; best = Math.max(best, streak); }
+    else streak = 0;
+  }
+  if (best >= 5) give('nostradamus');
+
+  return newly;
+}
+
+/**
+ * Marque la mission « score exact » (type exact_score) comme complétée pour un joueur.
+ * Cosmétique (barre de progression du profil) — n'affecte ni le solde ni les paris.
+ */
+export function progressExactScoreMission(userId: string): void {
+  db.prepare(
+    `UPDATE player_missions
+       SET progress = (SELECT target FROM missions WHERE id = player_missions.mission_id), is_completed = 1
+     WHERE player_id = ? AND mission_id IN (SELECT id FROM missions WHERE type = 'exact_score')`,
+  ).run(userId);
 }
 
 export default db;

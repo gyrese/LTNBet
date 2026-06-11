@@ -11,6 +11,9 @@ services:
       - "3000:3000"
     volumes:
       - ./data:/app/data
+    # Injecte TOUTES les clés (odds-api.io, API-Football, Football-Data, bookmakers) dans le conteneur.
+    # ⚠️ Le fichier .env.local doit être présent à côté de ce docker-compose.yml sur le VPS.
+    env_file:
+      - .env.local
     environment:
       - PORT=3000
-      - FOOTBALL_API_KEY=${FOOTBALL_API_KEY}

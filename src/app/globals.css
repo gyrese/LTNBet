@@ -7,82 +7,85 @@
   --font-jetbrains: var(--font-jetbrains), monospace;
 
   /* ====================================================================
-     COLOR SYSTEM — "Cinematic Broadcast" Midnight Navy
-     Token names are preserved (so the whole app re-themes), but the
-     values are upgraded from washed-out grey to a rich, premium navy
-     with electric-blue + gold accents. All on-* pairs hit AA contrast.
+     COLOR SYSTEM — "Liquid Neon Sports"
+     Violet primary CTA · Orange HOME · Electric blue AWAY · Gold rewards
      ==================================================================== */
 
-  /* Accent (electric periwinkle blue — reads great as text on navy) */
-  --color-primary: #7da4ff;
-  --color-on-primary: #07142e;
-  --color-primary-container: #16284f;
-  --color-on-primary-container: #c3d4ff;
+  /* Primary — vivid violet (CTA, selections, brand) */
+  --color-primary: #7B61FF;
+  --color-on-primary: #FFFFFF;
+  --color-primary-container: #1E1660;
+  --color-on-primary-container: #C5B8FF;
 
-  /* Secondary (vivid France-blue — used for solid CTAs) */
-  --color-secondary: #9db4ff;
-  --color-on-secondary: #001a55;
-  --color-secondary-container: #2b5bff;
-  --color-on-secondary-container: #e6ecff;
+  /* Secondary — electric blue (away team, info) */
+  --color-secondary: #1A8FFF;
+  --color-on-secondary: #FFFFFF;
+  --color-secondary-container: #003090;
+  --color-on-secondary-container: #A0C8FF;
 
-  /* Tertiary (premium gold) */
-  --color-tertiary: #f6c648;
-  --color-on-tertiary: #2c2200;
-  --color-tertiary-container: #c79b1e;
-  --color-on-tertiary-container: #4a3a00;
-  --color-tertiary-fixed-dim: #f6c648;
+  /* Tertiary — deep gold (ranking, rewards) */
+  --color-tertiary: #FFB800;
+  --color-on-tertiary: #1A1000;
+  --color-tertiary-container: #7A5800;
+  --color-on-tertiary-container: #FFE082;
+  --color-tertiary-fixed-dim: #FFB800;
 
-  /* Backgrounds & surfaces (layered navy elevation) */
-  --color-background: #080d1a;
-  --color-on-background: #eaeef9;
+  /* Team accent tokens — available as text-home, bg-away, etc. */
+  --color-home: #FF5000;
+  --color-away: #1A8FFF;
 
-  --color-surface: #0a1124;
-  --color-on-surface: #eaeef9;
-  --color-surface-variant: #1a2342;
-  --color-on-surface-variant: #a4b2d4;
-  --color-surface-bright: #283457;
-  --color-surface-dim: #070b16;
+  /* Backgrounds & surfaces */
+  --color-background: #0A0A1E;
+  --color-on-background: #F0F0FF;
 
-  --color-surface-container-lowest: #070b16;
-  --color-surface-container-low: #0d1428;
-  --color-surface-container: #121b34;
-  --color-surface-container-high: #18233f;
-  --color-surface-container-highest: #212e4e;
+  --color-surface: #0F0F28;
+  --color-on-surface: #F0F0FF;
+  --color-surface-variant: #1A1A46;
+  --color-on-surface-variant: rgba(200, 200, 255, 0.55);
+  --color-surface-bright: #282870;
+  --color-surface-dim: #07071A;
 
-  --color-outline: #66739a;
-  --color-outline-variant: #2c3859;
+  --color-surface-container-lowest: #07071A;
+  --color-surface-container-low: #0C0C22;
+  --color-surface-container: #141430;
+  --color-surface-container-high: #1C1C48;
+  --color-surface-container-highest: #242460;
 
-  /* Error / live */
-  --color-error: #ff8a87;
-  --color-on-error: #5c0006;
-  --color-error-container: #8c0009;
-  --color-on-error-container: #ffdad6;
+  --color-outline: rgba(123, 97, 255, 0.22);
+  --color-outline-variant: rgba(123, 97, 255, 0.10);
 
-  /* Brand fixed accents */
-  --color-france-blue: #2b5bff;
-  --color-france-red: #ff3b47;
-  --color-france-white: #ffffff;
-  --color-gold: #ffd24a;
+  /* Error / destructive */
+  --color-error: #FF3B47;
+  --color-on-error: #FFFFFF;
+  --color-error-container: #7B0010;
+  --color-on-error-container: #FFDAD6;
+
+  /* Brand constants */
+  --color-gold: #FFB800;
+  --color-france-blue: #1A8FFF;
+  --color-france-red: #FF3B47;
+  --color-france-white: #FFFFFF;
 
   /* ---------- Animations ---------- */
   --animate-ticker: ticker 28s linear infinite;
   --animate-pulse-glow: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-shimmer: shimmer 2.4s linear infinite;
   --animate-float: float 7s ease-in-out infinite;
-  --animate-gradient-pan: gradient-pan 6s ease infinite;
-  --animate-aurora: aurora 18s ease-in-out infinite;
+  --animate-gradient-pan: gradient-pan 8s ease infinite;
+  --animate-aurora: aurora 22s ease-in-out infinite;
   --animate-rise: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-energy-pulse: energy-pulse 2.5s ease-in-out infinite;
 }
 
 /* ===================================================================
    BASE
    =================================================================== */
 :root {
-  background-color: #070b16;
-  color: #eaeef9;
+  background-color: #07071a;
+  color: #F0F0FF;
   min-height: 100vh;
   color-scheme: dark;
-  --grain-opacity: 0.035;
+  --grain-opacity: 0.022;
 }
 
 body {
@@ -91,35 +94,34 @@ body {
   position: relative;
 }
 
-/* Premium layered "stadium night" backdrop applied app-wide.
-   Fixed so it never scrolls; sits behind all content. */
+/* Stadium split backdrop — orange HOME from left, blue AWAY from right */
 .app-backdrop {
   position: fixed;
   inset: 0;
   z-index: -2;
   background:
-    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(43, 91, 255, 0.22), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 100% 0%, rgba(246, 198, 72, 0.07), transparent 55%),
-    radial-gradient(ellipse 80% 60% at 0% 30%, rgba(43, 91, 255, 0.10), transparent 55%),
-    radial-gradient(ellipse 100% 80% at 50% 110%, rgba(255, 59, 71, 0.08), transparent 60%),
-    linear-gradient(180deg, #0a1124 0%, #070b16 55%, #060912 100%);
+    radial-gradient(ellipse 65% 55% at -8% 0%, rgba(255, 80, 0, 0.22), transparent 55%),
+    radial-gradient(ellipse 65% 55% at 108% 0%, rgba(26, 143, 255, 0.22), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 50% 110%, rgba(123, 97, 255, 0.20), transparent 60%),
+    linear-gradient(180deg, #0e0e28 0%, #0a0a1e 50%, #07071a 100%);
   pointer-events: none;
 }
 
-/* Soft moving aurora wash for depth */
+/* Slow aurora: home/away ambient wash */
 .app-backdrop::before {
   content: "";
   position: absolute;
   inset: -20%;
   background:
-    radial-gradient(40% 40% at 20% 30%, rgba(43, 91, 255, 0.18), transparent 70%),
-    radial-gradient(35% 35% at 80% 60%, rgba(125, 164, 255, 0.12), transparent 70%);
-  filter: blur(40px);
+    radial-gradient(40% 35% at 12% 30%, rgba(255, 80, 0, 0.11), transparent 65%),
+    radial-gradient(38% 32% at 88% 25%, rgba(26, 143, 255, 0.11), transparent 65%),
+    radial-gradient(30% 28% at 50% 72%, rgba(123, 97, 255, 0.09), transparent 65%);
+  filter: blur(50px);
   animation: var(--animate-aurora);
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
-/* Fine film grain to kill banding and add a tactile, expensive feel */
+/* Fine grain texture */
 .app-grain {
   position: fixed;
   inset: 0;
@@ -130,34 +132,34 @@ body {
 }
 
 /* ===================================================================
-   GLASS SYSTEM — refined frosted surfaces with gradient hairline edge
+   CARD SYSTEM — deep neon-bordered surfaces
    =================================================================== */
 .glass-panel {
-  position: relative;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(
+    160deg,
+    rgba(123, 97, 255, 0.06) 0%,
+    rgba(10, 10, 30, 0.92) 60%,
+    rgba(14, 14, 44, 0.88) 100%
+  );
+  border: 1px solid rgba(123, 97, 255, 0.14);
   box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
-    0 18px 40px -24px rgba(0, 0, 0, 0.85);
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 4px 24px -8px rgba(0, 0, 0, 0.7);
 }
 
-/* Stronger, more opaque variant for floating panels / bet slips */
 .glass-strong {
-  position: relative;
-  background:
-    linear-gradient(180deg, rgba(28, 40, 72, 0.72), rgba(12, 19, 38, 0.78));
-  backdrop-filter: blur(28px) saturate(150%);
-  -webkit-backdrop-filter: blur(28px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: linear-gradient(
+    160deg,
+    rgba(20, 20, 60, 0.96) 0%,
+    rgba(10, 10, 30, 0.98) 100%
+  );
+  border: 1px solid rgba(123, 97, 255, 0.18);
   box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
-    0 30px 60px -28px rgba(0, 0, 0, 0.9);
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 32px -8px rgba(0, 0, 0, 0.85);
 }
 
-/* Animated gradient-border wrapper for premium / hero cards */
+/* Animated gradient border — orange › violet › blue › gold liquid flow */
 .gradient-border {
   position: relative;
   isolation: isolate;
@@ -170,11 +172,13 @@ body {
   padding: 1px;
   background: linear-gradient(
     135deg,
-    rgba(125, 164, 255, 0.6),
-    rgba(255, 255, 255, 0.05) 35%,
-    rgba(246, 198, 72, 0.45) 70%,
-    rgba(125, 164, 255, 0.5)
+    rgba(255, 80, 0, 0.65),
+    rgba(123, 97, 255, 0.50) 30%,
+    rgba(26, 143, 255, 0.55) 65%,
+    rgba(255, 184, 0, 0.50)
   );
+  background-size: 300% 300%;
+  animation: var(--animate-gradient-pan);
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -186,67 +190,125 @@ body {
   pointer-events: none;
 }
 
+/* Energy card — stronger violet glow */
+.energy-card {
+  background: linear-gradient(
+    135deg,
+    rgba(123, 97, 255, 0.10) 0%,
+    rgba(10, 10, 30, 0.95) 100%
+  );
+  border: 1px solid rgba(123, 97, 255, 0.24);
+  box-shadow:
+    inset 0 1px 0 rgba(123, 97, 255, 0.08),
+    0 0 24px -6px rgba(123, 97, 255, 0.32),
+    0 4px 24px -8px rgba(0, 0, 0, 0.7);
+}
+
 /* ===================================================================
    GLOWS & ACCENT EDGES
    =================================================================== */
 .neon-glow-primary {
-  box-shadow: 0 0 0 1px rgba(125, 164, 255, 0.25), 0 0 22px rgba(43, 91, 255, 0.35);
+  box-shadow: 0 0 0 1px rgba(123, 97, 255, 0.30), 0 0 22px rgba(123, 97, 255, 0.40);
+}
+.neon-glow-home {
+  box-shadow: 0 0 0 1px rgba(255, 80, 0, 0.30), 0 0 22px rgba(255, 80, 0, 0.40);
+}
+.neon-glow-away {
+  box-shadow: 0 0 0 1px rgba(26, 143, 255, 0.30), 0 0 22px rgba(26, 143, 255, 0.40);
 }
 .neon-glow-tertiary {
-  box-shadow: 0 0 0 1px rgba(246, 198, 72, 0.3), 0 0 26px rgba(246, 198, 72, 0.4);
+  box-shadow: 0 0 0 1px rgba(255, 184, 0, 0.30), 0 0 26px rgba(255, 184, 0, 0.40);
 }
 .glow-accent {
-  box-shadow: 0 0 0 1px rgba(125, 164, 255, 0.45), 0 0 26px rgba(43, 91, 255, 0.45);
+  box-shadow: 0 0 0 1px rgba(123, 97, 255, 0.50), 0 0 26px rgba(123, 97, 255, 0.45);
 }
 .glow-gold {
-  box-shadow: 0 0 0 1px rgba(246, 198, 72, 0.45), 0 0 30px rgba(246, 198, 72, 0.4);
+  box-shadow: 0 0 0 1px rgba(255, 184, 0, 0.50), 0 0 30px rgba(255, 184, 0, 0.40);
 }
+
 .text-glow {
-  text-shadow: 0 0 18px rgba(246, 198, 72, 0.5);
+  text-shadow: 0 0 20px rgba(255, 184, 0, 0.65);
 }
 .text-glow-blue {
-  text-shadow: 0 0 18px rgba(125, 164, 255, 0.55);
+  text-shadow: 0 0 20px rgba(26, 143, 255, 0.70);
+}
+.text-glow-violet {
+  text-shadow: 0 0 20px rgba(123, 97, 255, 0.65);
+}
+.text-glow-home {
+  text-shadow: 0 0 20px rgba(255, 80, 0, 0.65);
 }
 
 .neon-border-top-blue {
   border-top: 2px solid transparent;
-  border-image: linear-gradient(90deg, transparent, #2b5bff, transparent) 1;
+  border-image: linear-gradient(90deg, transparent, #1A8FFF, transparent) 1;
 }
 .neon-border-top-red {
   border-top: 2px solid transparent;
-  border-image: linear-gradient(90deg, transparent, #ff3b47, transparent) 1;
+  border-image: linear-gradient(90deg, transparent, #FF3B47, transparent) 1;
+}
+.neon-border-top-violet {
+  border-top: 2px solid transparent;
+  border-image: linear-gradient(90deg, transparent, #7B61FF, transparent) 1;
+}
+.neon-border-top-orange {
+  border-top: 2px solid transparent;
+  border-image: linear-gradient(90deg, transparent, #FF5000, transparent) 1;
 }
 
-/* Premium primary button */
+/* ===================================================================
+   BUTTONS
+   =================================================================== */
+/* Neon violet primary CTA */
 .btn-primary {
   position: relative;
-  background: linear-gradient(180deg, #3b6bff, #1e46e0);
+  background: linear-gradient(180deg, #9278FF, #5E40F0);
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.25) inset,
-    0 10px 30px -8px rgba(43, 91, 255, 0.6);
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 10px 30px -8px rgba(123, 97, 255, 0.65);
   transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease, filter 0.18s ease;
 }
 .btn-primary:hover {
   transform: translateY(-1px);
-  filter: brightness(1.06);
+  filter: brightness(1.08);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.3) inset,
-    0 16px 40px -8px rgba(43, 91, 255, 0.75);
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 16px 40px -8px rgba(123, 97, 255, 0.80);
 }
 .btn-primary:active {
   transform: translateY(0) scale(0.985);
 }
 
+/* Orange HOME energy CTA */
+.btn-home {
+  position: relative;
+  background: linear-gradient(180deg, #FF6520, #E03500);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 10px 30px -8px rgba(255, 80, 0, 0.65);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), filter 0.18s ease;
+}
+.btn-home:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+.btn-home:active {
+  transform: translateY(0) scale(0.985);
+}
+
+/* Gold rewards button */
 .btn-gold {
   position: relative;
-  background: linear-gradient(180deg, #ffd97a, #e9af1f);
-  color: #2c2200;
+  background: linear-gradient(180deg, #FFD05A, #E89B10);
+  color: #1a1000;
   border: 1px solid rgba(255, 255, 255, 0.35);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.5) inset,
-    0 10px 30px -10px rgba(246, 198, 72, 0.6);
+    inset 0 1px 0 rgba(255, 255, 255, 0.50),
+    0 10px 30px -10px rgba(255, 184, 0, 0.65);
   transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), filter 0.18s ease;
 }
 .btn-gold:hover {
@@ -257,7 +319,9 @@ body {
   transform: translateY(0) scale(0.985);
 }
 
-/* Shimmer sweep overlay (for premium chips / winning rows) */
+/* ===================================================================
+   SHIMMER
+   =================================================================== */
 .shimmer {
   position: relative;
   overflow: hidden;
@@ -269,7 +333,7 @@ body {
   background: linear-gradient(
     110deg,
     transparent 25%,
-    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.13) 50%,
     transparent 75%
   );
   background-size: 220% 100%;
@@ -277,15 +341,17 @@ body {
   pointer-events: none;
 }
 
-/* Live pulse dot */
+/* ===================================================================
+   LIVE INDICATOR — orange pulsing dot
+   =================================================================== */
 .live-dot {
   position: relative;
   display: inline-block;
-  width: 0.6rem;
-  height: 0.6rem;
+  width: 0.55rem;
+  height: 0.55rem;
   border-radius: 9999px;
-  background: #ff3b47;
-  box-shadow: 0 0 0 0 rgba(255, 59, 71, 0.7);
+  background: #FF5000;
+  box-shadow: 0 0 0 0 rgba(255, 80, 0, 0.7);
   animation: live-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
@@ -293,51 +359,61 @@ body {
    KEYFRAMES
    =================================================================== */
 @keyframes ticker {
-  0% { transform: translateX(0%); }
+  0%   { transform: translateX(0%); }
   100% { transform: translateX(-50%); }
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 1; filter: drop-shadow(0 0 10px rgba(255, 59, 71, 0.8)); }
-  50% { opacity: 0.5; filter: drop-shadow(0 0 2px rgba(255, 59, 71, 0.3)); }
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 10px rgba(255, 80, 0, 0.8)); }
+  50%       { opacity: 0.5; filter: drop-shadow(0 0 2px rgba(255, 80, 0, 0.3)); }
 }
 
 @keyframes shimmer {
-  0% { background-position: 220% 0; }
+  0%   { background-position: 220% 0; }
   100% { background-position: -120% 0; }
 }
 
 @keyframes float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  50%       { transform: translateY(-10px); }
 }
 
 @keyframes gradient-pan {
   0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
+  50%       { background-position: 100% 50%; }
 }
 
 @keyframes aurora {
   0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(6%, -4%) scale(1.08); }
-  66% { transform: translate(-5%, 5%) scale(1.04); }
+  33%       { transform: translate(5%, -4%) scale(1.06); }
+  66%       { transform: translate(-4%, 5%) scale(1.04); }
 }
 
 @keyframes rise {
-  0% { opacity: 0; transform: translateY(14px); }
+  0%   { opacity: 0; transform: translateY(16px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes live-ping {
-  0% { box-shadow: 0 0 0 0 rgba(255, 59, 71, 0.6); }
-  70% { box-shadow: 0 0 0 7px rgba(255, 59, 71, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(255, 59, 71, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(255, 80, 0, 0.6); }
+  70%  { box-shadow: 0 0 0 8px rgba(255, 80, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 80, 0, 0); }
 }
 
-/* Scanline HUD effect (kept, softened) */
+@keyframes energy-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(123, 97, 255, 0.4); }
+  50%       { box-shadow: 0 0 0 10px rgba(123, 97, 255, 0); }
+}
+
+@keyframes score-slam {
+  0%   { transform: scale(1.35); opacity: 0.6; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Scanline HUD effect — violet tint */
 @keyframes scanline {
-  0% { transform: translateY(-100%); opacity: 0; }
-  50% { opacity: 0.05; }
+  0%   { transform: translateY(-100%); opacity: 0; }
+  50%  { opacity: 0.04; }
   100% { transform: translateY(100vh); opacity: 0; }
 }
 .scanline-effect::after {
@@ -347,8 +423,8 @@ body {
   left: 0;
   width: 100%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(125, 164, 255, 0.5), transparent);
-  animation: scanline 9s linear infinite;
+  background: linear-gradient(90deg, transparent, rgba(123, 97, 255, 0.45), transparent);
+  animation: scanline 12s linear infinite;
   pointer-events: none;
   z-index: 10;
 }
@@ -356,60 +432,66 @@ body {
 /* ===================================================================
    SCROLLBAR
    =================================================================== */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(125, 164, 255, 0.35), rgba(125, 164, 255, 0.15));
+  background: linear-gradient(180deg, rgba(123, 97, 255, 0.40), rgba(123, 97, 255, 0.15));
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(125, 164, 255, 0.6), rgba(125, 164, 255, 0.3));
+  background: linear-gradient(180deg, rgba(123, 97, 255, 0.65), rgba(123, 97, 255, 0.30));
   background-clip: padding-box;
 }
 
-/* Range slider accent */
 input[type="range"] {
-  accent-color: #7da4ff;
+  accent-color: #7B61FF;
 }
 
 ::selection {
-  background: rgba(43, 91, 255, 0.45);
+  background: rgba(123, 97, 255, 0.40);
   color: #fff;
 }
 
 /* ===================================================================
-   TYPOGRAPHY ROLES (from DESIGN.md)
+   TYPOGRAPHY ROLES
+   --font-anybody → Bebas Neue (display, scores, bold headings)
+   --font-hanken  → DM Sans (all UI text, labels)
+   --font-jetbrains → JetBrains Mono (odds, data, timestamps)
    =================================================================== */
 .font-display-hero {
   font-family: var(--font-anybody);
-  font-size: 72px;
-  font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.04em;
+  font-size: 80px;
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 .font-headline-lg {
   font-family: var(--font-anybody);
-  font-size: 40px;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
+  font-size: 52px;
+  font-weight: 400;
+  line-height: 1.0;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 .font-headline-lg-mobile {
   font-family: var(--font-anybody);
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+  font-size: 38px;
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 .font-score-display {
   font-family: var(--font-anybody);
-  font-size: 56px;
-  font-weight: 900;
+  font-size: 72px;
+  font-weight: 400;
   line-height: 1;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
 }
 .font-body-lg {
   font-family: var(--font-hanken);
@@ -428,18 +510,18 @@ input[type="range"] {
   font-size: 14px;
   font-weight: 500;
   line-height: 1.4;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
 }
 .font-label-caps {
   font-family: var(--font-hanken);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
 }
 
-/* Tabular numbers helper for any counter/score */
 .tabular { font-variant-numeric: tabular-nums; }
 
 /* ===================================================================

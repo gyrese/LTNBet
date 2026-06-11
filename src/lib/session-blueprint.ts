@@ -60,6 +60,35 @@ export function buildSessionBlueprint(match: MatchInput, odds: ParsedOdds | null
     outcomes: outcomes.map((oc) => ({ id: oc.id, name: oc.name, baseOdds: oc.v[0], oddsSource: oc.v[1] })),
   });
 
+  // PREMIER BUTEUR
+  const scorerOutcomes: { id: string; name: string; v: [number, OddsSource] }[] = [];
+  if (o && Array.isArray(o.scorers) && o.scorers.length > 0) {
+    const topScorers = [...o.scorers]
+      .sort((a, b) => a.odds - b.odds)
+      .slice(0, 15);
+
+    topScorers.forEach((s, idx) => {
+      const firstOdds = r2(s.odds * 3.0);
+      scorerOutcomes.push({
+        id: `o-${matchId}-pb-player-${idx}`,
+        name: s.name,
+        v: [firstOdds, 'api'],
+      });
+    });
+
+    scorerOutcomes.push({
+      id: `o-${matchId}-pb-autre`,
+      name: 'Autre Buteur',
+      v: [2.5, 'default'],
+    });
+  } else {
+    scorerOutcomes.push(
+      { id: `o-${matchId}-pb-vedette-1`, name: `Buteur ${H} (Vedette)`, v: [3.8, 'default'] },
+      { id: `o-${matchId}-pb-vedette-2`, name: `Buteur ${A} (Vedette)`, v: [4.2, 'default'] },
+      { id: `o-${matchId}-pb-autre`, name: 'Autre Buteur', v: [2.8, 'default'] },
+    );
+  }
+
   return [
     mk(`m-${matchId}-resultat`, 'final_result', 'RÉSULTAT DU MATCH', [
       { id: `o-${matchId}-res-home`, name: H, v: pick(o?.resultHome, 1.8) },
@@ -74,13 +103,12 @@ export function buildSessionBlueprint(match: MatchInput, odds: ParsedOdds | null
       { id: `o-${matchId}-se-30`, name: '3-0', v: pickScore('3-0', 10.0) },
       { id: `o-${matchId}-se-01`, name: '0-1', v: pickScore('0-1', 9.0) },
       { id: `o-${matchId}-se-11`, name: '1-1', v: pickScore('1-1', 5.5) },
+      // Catch-all OBLIGATOIRE : tout score non listé (0-0, 2-2, 3-1, 4-0…) tombe ici.
+      // Sans lui, le marché ne se résout jamais et les paris restent « pending » à vie.
+      { id: `o-${matchId}-se-autre`, name: 'Autre Score', v: [4.5, 'default'] },
     ]),
 
-    mk(`m-${matchId}-buteurs`, 'first_scorer', 'PREMIER BUTEUR', [
-      { id: `o-${matchId}-pb-vedette-1`, name: `Buteur ${H} (Vedette)`, v: [3.8, 'default'] },
-      { id: `o-${matchId}-pb-vedette-2`, name: `Buteur ${A} (Vedette)`, v: [4.2, 'default'] },
-      { id: `o-${matchId}-pb-autre`, name: 'Autre Buteur', v: [2.8, 'default'] },
-    ]),
+    mk(`m-${matchId}-buteurs`, 'first_scorer', 'PREMIER BUTEUR', scorerOutcomes),
 
     mk(`m-${matchId}-corners`, 'corners_count', `NOMBRE DE CORNERS ${H.toUpperCase()}`, [
       { id: `o-${matchId}-co-l5`, name: 'Moins de 5', v: [2.2, 'default'] },
@@ -110,6 +138,52 @@ export function buildSessionBlueprint(match: MatchInput, odds: ParsedOdds | null
     mk(`m-${matchId}-ou25`, 'over_under_25', 'PLUS DE 2.5 BUTS DANS LE MATCH ?', [
       { id: `o-${matchId}-ou25-yes`, name: 'Oui', v: pick(o?.ou25Over, 2.1) },
       { id: `o-${matchId}-ou25-no`, name: 'Non', v: pick(o?.ou25Under, 1.7) },
+    ]),
+
+    // ─── Nouveaux Marchés additionnels structurés en Oui/Non (type: 'flash') ───
+    mk(`m-${matchId}-dc-home-nul`, 'flash', `DOUBLE CHANCE - ${H.toUpperCase()} OU NUL ?`, [
+      { id: `o-${matchId}-dchn-yes`, name: 'Oui', v: pick(o?.dc1X, 1.15) },
+      { id: `o-${matchId}-dchn-no`, name: 'Non', v: pick(o?.resultAway, 2.9) },
+    ]),
+
+    mk(`m-${matchId}-dc-away-nul`, 'flash', `DOUBLE CHANCE - ${A.toUpperCase()} OU NUL ?`, [
+      { id: `o-${matchId}-dcan-yes`, name: 'Oui', v: pick(o?.dcX2, 1.25) },
+      { id: `o-${matchId}-dcan-no`, name: 'Non', v: pick(o?.resultHome, 1.8) },
+    ]),
+
+    mk(`m-${matchId}-dc-home-away`, 'flash', `DOUBLE CHANCE - ${H.toUpperCase()} OU ${A.toUpperCase()} ?`, [
+      { id: `o-${matchId}-dcha-yes`, name: 'Oui', v: pick(o?.dc12, 1.22) },
+      { id: `o-${matchId}-dcha-no`, name: 'Non', v: pick(o?.resultDraw, 3.2) },
+    ]),
+
+    mk(`m-${matchId}-ou15`, 'flash', 'PLUS DE 1.5 BUTS DANS LE MATCH ?', [
+      { id: `o-${matchId}-ou15-yes`, name: 'Oui', v: pick(o?.ou15Over, 1.3) },
+      { id: `o-${matchId}-ou15-no`, name: 'Non', v: pick(o?.ou15Under, 3.0) },
+    ]),
+
+    mk(`m-${matchId}-ou35`, 'flash', 'PLUS DE 3.5 BUTS DANS LE MATCH ?', [
+      { id: `o-${matchId}-ou35-yes`, name: 'Oui', v: pick(o?.ou35Over, 3.4) },
+      { id: `o-${matchId}-ou35-no`, name: 'Non', v: pick(o?.ou35Under, 1.3) },
+    ]),
+
+    mk(`m-${matchId}-home-over15`, 'flash', `${H.toUpperCase()} MARQUE PLUS DE 1.5 BUTS ?`, [
+      { id: `o-${matchId}-ho15-yes`, name: 'Oui', v: pick(o?.homeOver15, 1.65) },
+      { id: `o-${matchId}-ho15-no`, name: 'Non', v: pick(o?.homeUnder15, 2.0) },
+    ]),
+
+    mk(`m-${matchId}-away-over15`, 'flash', `${A.toUpperCase()} MARQUE PLUS DE 1.5 BUTS ?`, [
+      { id: `o-${matchId}-ao15-yes`, name: 'Oui', v: pick(o?.awayOver15, 4.5) },
+      { id: `o-${matchId}-ao15-no`, name: 'Non', v: pick(o?.awayUnder15, 1.15) },
+    ]),
+
+    mk(`m-${matchId}-home-cleansheet`, 'flash', `${H.toUpperCase()} GARDE SA CAGE INVIOLÉE (CLEAN SHEET) ?`, [
+      { id: `o-${matchId}-hcs-yes`, name: 'Oui', v: pick(o?.awayUnder05, 1.9) },
+      { id: `o-${matchId}-hcs-no`, name: 'Non', v: pick(o?.awayOver05, 1.8) },
+    ]),
+
+    mk(`m-${matchId}-away-cleansheet`, 'flash', `${A.toUpperCase()} GARDE SA CAGE INVIOLÉE (CLEAN SHEET) ?`, [
+      { id: `o-${matchId}-acs-yes`, name: 'Oui', v: pick(o?.homeUnder05, 5.5) },
+      { id: `o-${matchId}-acs-no`, name: 'Non', v: pick(o?.homeOver05, 1.12) },
     ]),
   ];
 }

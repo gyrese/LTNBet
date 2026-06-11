@@ -1,392 +1,606 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useGameStore } from '@/lib/store';
 import QRCode from 'qrcode';
-import { motion as motionClient } from 'framer-motion';
+import { getAvatarConfig } from '@/lib/avatars';
+import { flagFor } from '@/lib/flags';
 import GameEventOverlay from '@/components/GameEventOverlay';
 
-import { getAvatarConfig } from '@/lib/avatars';
-import { flagFor, flagUrlFor } from '@/lib/flags';
+const ORANGE = '#FF6B00';
+const CYAN = '#00C8FF';
+const GOLD = '#FFD700';
+const SILVER = '#C0C0C0';
+const BRONZE = '#CD7F32';
 
-export default function ScreenPage() {
+const MEDAL_COLORS = [GOLD, SILVER, BRONZE];
+const MEDAL_GLOWS = [
+  '0 0 18px rgba(255,215,0,0.45)',
+  '0 0 14px rgba(192,192,192,0.3)',
+  '0 0 14px rgba(205,127,50,0.3)',
+];
+
+// --- SVG Donut for possession ---
+function PossessionDonut({ home }: { home: number }) {
+  const r = 38;
+  const stroke = 14;
+  const size = 100;
+  const c = size / 2;
+  const circumference = 2 * Math.PI * r;
+  const homeArc = (home / 100) * circumference;
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}
+      style={{ transform: 'rotate(-90deg)', display: 'block', margin: '0 auto' }}
+    >
+      <circle cx={c} cy={c} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={stroke} />
+      <circle
+        cx={c} cy={c} r={r} fill="none"
+        stroke={CYAN} strokeWidth={stroke}
+        strokeDasharray={`${circumference - homeArc} ${circumference}`}
+        strokeDashoffset={-homeArc}
+      />
+      <circle
+        cx={c} cy={c} r={r} fill="none"
+        stroke={ORANGE} strokeWidth={stroke}
+        strokeDasharray={`${homeArc} ${circumference}`}
+      />
+    </svg>
+  );
+}
+
+// --- Shot bars ---
+function ShotBars({ home, away }: { home: number; away: number }) {
+  const max = Math.max(home, away, 1);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <span style={{ fontSize: 11, color: ORANGE, fontWeight: 700, fontFamily: 'var(--font-jetbrains)', width: 20, textAlign: 'right' }}>{home}</span>
+        <div className="flex-1 h-3.5 rounded-sm overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <div className="h-full rounded-sm transition-all duration-700"
+            style={{ width: `${(home / max) * 100}%`, background: `linear-gradient(90deg, ${ORANGE}, rgba(255,150,30,0.7))` }} />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <span style={{ fontSize: 11, color: CYAN, fontWeight: 700, fontFamily: 'var(--font-jetbrains)', width: 20, textAlign: 'right' }}>{away}</span>
+        <div className="flex-1 h-3.5 rounded-sm overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <div className="h-full rounded-sm transition-all duration-700"
+            style={{ width: `${(away / max) * 100}%`, background: `linear-gradient(90deg, ${CYAN}, rgba(0,180,255,0.6))` }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Card slots (up to 4 small squares) ---
+function CardSlots({ count, color }: { count: number; color: string }) {
+  return (
+    <div className="flex gap-[3px]">
+      {Array.from({ length: 4 }, (_, i) => (
+        <div key={i} className="w-[11px] h-4 rounded-[2px]"
+          style={{ background: i < count ? color : 'rgba(255,255,255,0.1)' }} />
+      ))}
+    </div>
+  );
+}
+
+// --- Leaderboard avatar cell ---
+function Avatar({ player, size = 32 }: { player: { avatar: string; username: string }; size?: number }) {
+  const cfg = getAvatarConfig(player.avatar);
+  return (
+    <div
+      className="rounded-full overflow-hidden shrink-0 border"
+      style={{ width: size, height: size, borderColor: 'rgba(255,255,255,0.15)' }}
+    >
+      {cfg.imagePath ? (
+        <img src={cfg.imagePath} alt={cfg.name} className="w-full h-full object-cover" />
+      ) : (
+        <div className={`w-full h-full flex items-center justify-center bg-gradient-to-br ${cfg.color}`}
+          style={{ fontSize: size * 0.45 }}>{cfg.emoji}</div>
+      )}
+    </div>
+  );
+}
+
+export default function BroadcastScreen() {
   const { match, leaderboard } = useGameStore();
   const [qrUrl, setQrUrl] = useState('');
-  const [tickerEvents, setTickerEvents] = useState<any[]>([]);
+  const [tickerEvents, setTickerEvents] = useState<{ id: string; type: string; title: string; subtitle: string }[]>([]);
+  const [secs, setSecs] = useState(0);
 
-  // Periodically advance the live match simulation / sync
+  // Sync poll
   useEffect(() => {
-    if (match.status !== 'live') return;
-    const syncInterval = setInterval(async () => {
-      try {
-        await fetch('/api/admin/sync');
-      } catch (e) {
-        console.error('[Sync Poll] error:', e);
-      }
-    }, 15000);
-    return () => clearInterval(syncInterval);
+    if (match.status !== 'live' && match.status !== 'half_time') return;
+    const id = setInterval(() => fetch('/api/admin/sync').catch(() => {}), 15000);
+    return () => clearInterval(id);
   }, [match.status]);
 
-  // Fetch real game events for the news ticker
+  // Ticker events
   useEffect(() => {
-    const fetchTicker = async () => {
+    const load = async () => {
       try {
         const res = await fetch('/api/db?op=ticker').then(r => r.json());
-        if (res.events) {
-          setTickerEvents(res.events);
-        }
-      } catch (err) {
-        console.error('Ticker fetch error', err);
-      }
+        if (res.events) setTickerEvents(res.events);
+      } catch { /* */ }
     };
-    fetchTicker();
-    const interval = setInterval(fetchTicker, 15000);
-    return () => clearInterval(interval);
+    load();
+    const id = setInterval(load, 15000);
+    return () => clearInterval(id);
   }, []);
 
+  // QR code
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const inviteUrl = `${window.location.origin}/join`;
-      QRCode.toDataURL(inviteUrl, {
-        margin: 1,
-        width: 320,
-        color: { dark: '#070b16', light: '#ffffff' },
-      })
-        .then((url) => setQrUrl(url))
-        .catch((err) => console.error('QR Code error', err));
-    }
+    if (typeof window === 'undefined') return;
+    QRCode.toDataURL(`${window.location.origin}/join`, {
+      margin: 1, width: 200, color: { dark: '#040810', light: '#ffffff' },
+    }).then(setQrUrl).catch(() => {});
   }, []);
 
-  const allPlayers = [...leaderboard];
-  allPlayers.sort((a, b) => (b.toilesCoins + b.totalWinnings) - (a.toilesCoins + a.totalWinnings));
-  const top7 = allPlayers.slice(0, 7);
+  // Client-side seconds ticker — restarts (and resets to 0) whenever elapsedTime or status changes
+  useEffect(() => {
+    if (match.status !== 'live') return;
+    let count = -1;
+    const id = setInterval(() => {
+      count = (count + 1) % 60;
+      setSecs(count);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [match.status, match.elapsedTime]);
 
-  const homeFlagUrl = flagUrlFor(match.homeTeam);
-  const awayFlagUrl = flagUrlFor(match.awayTeam);
+  const top10 = useMemo(
+    () => [...leaderboard]
+      .sort((a, b) => (b.toilesCoins + b.totalWinnings) - (a.toilesCoins + a.totalWinnings))
+      .slice(0, 10),
+    [leaderboard],
+  );
+
+  const possHome = match.possessionHome ?? 50;
+  const possAway = 100 - possHome;
+
+  const timerDisplay = match.status === 'live'
+    ? `${String(match.elapsedTime).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+    : match.status === 'half_time' ? 'HT'
+    : match.status === 'finished' ? 'FT'
+    : '--:--';
+
+  const statusBadge = match.status === 'live'
+    ? { label: 'LIVE', bg: 'rgba(255,30,30,0.18)', border: 'rgba(255,30,30,0.5)', color: '#FF3B3B' }
+    : match.status === 'half_time'
+    ? { label: 'HALF TIME', bg: 'rgba(255,215,0,0.1)', border: 'rgba(255,215,0,0.35)', color: GOLD }
+    : match.status === 'finished'
+    ? { label: 'FULL TIME', bg: 'rgba(125,164,255,0.1)', border: 'rgba(125,164,255,0.35)', color: '#7da4ff' }
+    : { label: 'UPCOMING', bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)' };
 
   return (
-    <div className="h-dvh w-screen text-on-surface overflow-hidden relative font-body-lg select-none">
-      {/* Cinematic backdrop layers */}
-      <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_-5%,rgba(43,91,255,0.22),transparent_60%),radial-gradient(ellipse_50%_40%_at_90%_100%,rgba(255,59,71,0.1),transparent_60%),linear-gradient(180deg,#070b16,#03050a)] pointer-events-none" />
+    <div
+      className="h-dvh w-screen overflow-hidden flex flex-col select-none"
+      style={{ background: '#050912', color: '#e8eef9', fontFamily: 'var(--font-hanken)' }}
+    >
+      {/* Layered stadium-inspired gradient backdrop */}
+      <div className="absolute inset-0 z-0 pointer-events-none" style={{
+        background: `
+          radial-gradient(ellipse 100% 55% at 50% -5%, rgba(0,90,30,0.20) 0%, transparent 55%),
+          radial-gradient(ellipse 55% 50% at 0% 65%, rgba(255,107,0,0.09) 0%, transparent 55%),
+          radial-gradient(ellipse 55% 50% at 100% 65%, rgba(0,200,255,0.09) 0%, transparent 55%),
+          radial-gradient(ellipse 80% 60% at 50% 110%, rgba(43,91,255,0.07) 0%, transparent 55%),
+          linear-gradient(180deg, #060d18 0%, #020508 100%)
+        `
+      }} />
+      {/* Subtle scanline HUD overlay */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-[0.025]" style={{
+        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,1) 2px, rgba(255,255,255,1) 3px)',
+        backgroundSize: '100% 3px',
+      }} />
 
-      <div className="relative w-full h-full flex flex-col max-w-[1920px] mx-auto p-6 pb-[96px] z-10">
-        
-        {/* Header */}
-        <header className="glass-strong border border-white/10 flex justify-between items-center w-full px-8 py-3.5 rounded-2xl mb-5 shadow-2xl">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-gradient-to-br from-secondary-container to-primary-container border border-white/15 shadow-[0_0_20px_rgba(43,91,255,0.35)]">
-              <span className="material-symbols-outlined text-white text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                sports_soccer
-              </span>
-            </div>
-            <span className="font-headline-lg text-[22px] italic uppercase tracking-tighter bg-gradient-to-r from-white via-primary to-white bg-clip-text text-transparent">
-              Les Toiles Noires Predictor
+      {/* ══════════════════════════════════════════
+          HEADER BAR
+      ══════════════════════════════════════════ */}
+      <header
+        className="relative z-10 flex items-center px-6 shrink-0"
+        style={{ height: 60, background: 'rgba(5,9,18,0.92)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+      >
+        {/* Left: status badge */}
+        <div className="flex items-center gap-3 w-1/4">
+          <div
+            className="flex items-center gap-2 px-4 py-1.5 rounded-full"
+            style={{ background: statusBadge.bg, border: `1px solid ${statusBadge.border}` }}
+          >
+            {match.status === 'live' && (
+              <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#FF3B3B', boxShadow: '0 0 8px #FF3B3B' }} />
+            )}
+            <span style={{ fontFamily: 'var(--font-anybody)', fontSize: 12, fontWeight: 800, letterSpacing: '0.18em', color: statusBadge.color }}>
+              {statusBadge.label}
             </span>
           </div>
-
-          <div className="flex items-center gap-6">
-            <div className="bg-error/12 border border-error/30 px-5 py-2 rounded-full flex items-center gap-2.5">
-              {match.status === 'live' && <span className="live-dot animate-pulse" />}
-              <span className="font-label-caps text-[12px] text-white tracking-widest uppercase font-bold">
-                {match.status === 'live' ? `DIRECT · ${match.elapsedTime}'` : match.status === 'half_time' ? 'MI-TEMPS' : match.status === 'finished' ? 'TERMINÉ' : 'AVANT-MATCH'}
-              </span>
-            </div>
-          </div>
-        </header>
-
-        {/* Dashboard Grid */}
-        <div className="flex-grow grid grid-cols-12 gap-6 items-stretch overflow-hidden h-[calc(100%-80px)]">
-          
-          {/* LEFT SECTION (Match & Stats) - 7 cols */}
-          <div className="col-span-7 flex flex-col gap-6">
-            
-            {/* Live Score Widget */}
-            <div className="glass-strong border border-white/10 rounded-3xl p-8 flex flex-col justify-center relative overflow-hidden shadow-2xl flex-grow max-h-[45%]">
-              <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-primary via-secondary-container to-error shadow-[0_0_15px_rgba(3,86,255,0.4)]" />
-              
-              <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-3">
-                <span className="font-label-caps text-[12px] text-on-surface-variant tracking-[0.2em] font-bold">SCORE DU MATCH</span>
-                <span className="font-data-mono text-[16px] text-primary font-bold">{match.elapsedTime}&apos;</span>
-              </div>
-
-              <div className="flex items-center justify-between px-6">
-                {/* Home Team */}
-                <div className="flex flex-col items-center gap-3.5 w-1/3">
-                  <div className="w-28 h-20 rounded-2xl bg-surface-container/80 flex items-center justify-center overflow-hidden shadow-[0_0_20px_rgba(255,255,255,0.06)] border border-white/15 relative group">
-                    {homeFlagUrl ? (
-                      <img src={homeFlagUrl} alt={match.homeTeam} className="w-full h-full object-cover transform scale-105" />
-                    ) : (
-                      <span className="text-5xl">{flagFor(match.homeTeam)}</span>
-                    )}
-                  </div>
-                  <span className="font-headline-lg text-[22px] font-bold text-white tracking-wide uppercase truncate w-full text-center">
-                    {match.homeTeam || 'DOMICILE'}
-                  </span>
-                </div>
-
-                {/* Score */}
-                <div className="font-score-display text-[64px] flex items-center gap-4 w-1/3 justify-center select-none font-black">
-                  <span className="text-primary drop-shadow-[0_0_20px_rgba(125,164,255,0.5)]">{match.homeScore}</span>
-                  <span className="text-on-surface-variant/30 text-[36px] font-normal">:</span>
-                  <span className="text-white">{match.awayScore}</span>
-                </div>
-
-                {/* Away Team */}
-                <div className="flex flex-col items-center gap-3.5 w-1/3">
-                  <div className="w-28 h-20 rounded-2xl bg-surface-container/80 flex items-center justify-center overflow-hidden shadow-[0_0_20px_rgba(255,255,255,0.06)] border border-white/15 relative group">
-                    {awayFlagUrl ? (
-                      <img src={awayFlagUrl} alt={match.awayTeam} className="w-full h-full object-cover transform scale-105" />
-                    ) : (
-                      <span className="text-5xl">{flagFor(match.awayTeam)}</span>
-                    )}
-                  </div>
-                  <span className="font-headline-lg text-[22px] font-bold text-on-surface-variant tracking-wide uppercase truncate w-full text-center">
-                    {match.awayTeam || 'EXTÉRIEUR'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Match Stats Widget */}
-            <div className="glass-panel rounded-3xl p-6 flex flex-col justify-center shadow-2xl flex-grow max-h-[55%]">
-              <h3 className="font-label-caps text-[14px] text-primary tracking-widest mb-4 border-b border-white/10 pb-2 font-bold">
-                STATISTIQUES DU MATCH
-              </h3>
-              <div className="space-y-4">
-                <ComparisonStat 
-                  label="POSSESSION" 
-                  leftVal={match.possessionHome} 
-                  rightVal={100 - match.possessionHome} 
-                  leftLabel={`${match.possessionHome}%`} 
-                  rightLabel={`${100 - match.possessionHome}%`} 
-                />
-
-                <ComparisonStat 
-                  label="TIRS (CADRÉS)" 
-                  leftVal={match.shotsHome} 
-                  rightVal={match.shotsAway} 
-                  leftLabel={`${match.shotsHome} (${match.shotsOnTargetHome})`} 
-                  rightLabel={`${match.shotsAway} (${match.shotsOnTargetAway})`} 
-                />
-
-                {(() => {
-                  const xGHome = (match.homeScore * 0.75 + match.shotsOnTargetHome * 0.12 + (match.shotsHome - match.shotsOnTargetHome) * 0.04);
-                  const xGAway = (match.awayScore * 0.75 + match.shotsOnTargetAway * 0.12 + (match.shotsAway - match.shotsOnTargetAway) * 0.04);
-                  const xGHomeStr = xGHome === 0 ? "0.00" : xGHome.toFixed(2);
-                  const xGAwayStr = xGAway === 0 ? "0.00" : xGAway.toFixed(2);
-                  return (
-                    <ComparisonStat 
-                      label="EXPECTED GOALS (XG) - ESTIMÉ" 
-                      leftVal={xGHome} 
-                      rightVal={xGAway} 
-                      leftLabel={xGHomeStr} 
-                      rightLabel={xGAwayStr} 
-                    />
-                  );
-                })()}
-
-                <ComparisonStat 
-                  label="PRÉCISION PASSES" 
-                  leftVal={match.passesAccuracyHome} 
-                  rightVal={match.passesAccuracyAway} 
-                  leftLabel={`${match.passesAccuracyHome}%`} 
-                  rightLabel={`${match.passesAccuracyAway}%`} 
-                />
-
-                <div className="grid grid-cols-3 gap-3 pt-1">
-                  <div className="bg-white/[0.02] px-3 py-2 rounded-xl border border-white/8 text-center flex flex-col justify-center">
-                    <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider uppercase font-bold">CORNERS</span>
-                    <div className="flex justify-between items-center px-1">
-                      <span className="font-score-display text-[20px] text-primary font-bold">{match.cornersHome}</span>
-                      <span className="text-on-surface-variant/30 text-[10px]">:</span>
-                      <span className="font-score-display text-[20px] text-white font-bold">{match.cornersAway}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white/[0.02] px-3 py-2 rounded-xl border border-white/8 text-center flex flex-col justify-center">
-                    <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider uppercase font-bold">FAUTES</span>
-                    <div className="flex justify-between items-center px-1">
-                      <span className="font-score-display text-[20px] text-primary font-bold">{match.foulsHome}</span>
-                      <span className="text-on-surface-variant/30 text-[10px]">:</span>
-                      <span className="font-score-display text-[20px] text-white font-bold">{match.foulsAway}</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-white/[0.02] px-3 py-2 rounded-xl border border-white/8 text-center flex flex-col justify-center">
-                    <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider uppercase font-bold">CARTONS</span>
-                    <div className="flex justify-between items-center px-1">
-                      <span className="font-score-display text-[20px] text-error font-bold">{match.cardsHome}</span>
-                      <span className="text-on-surface-variant/30 text-[10px]">:</span>
-                      <span className="font-score-display text-[20px] text-white font-bold">{match.cardsAway}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* RIGHT SECTION (Leaderboard & QR Code) - 5 cols */}
-          <div className="col-span-5 flex flex-col gap-6">
-            
-            {/* Leaderboard Card */}
-            <div className="glass-panel rounded-3xl p-6 shadow-2xl flex flex-col justify-between flex-grow max-h-[62%]">
-              <div>
-                <h3 className="font-headline-lg text-[22px] text-primary uppercase italic tracking-tight mb-4 flex items-center gap-2.5 border-b border-white/10 pb-3">
-                  <span className="material-symbols-outlined text-[26px] text-tertiary" style={{ fontVariationSettings: "'FILL' 1" }}>leaderboard</span>
-                  Classement Live · Top 7
-                </h3>
-
-                <div className="flex flex-col gap-2.5">
-                  {top7.map((player, idx) => {
-                    const avatar = getAvatarConfig(player.avatar);
-                    const isPodium = idx < 3;
-                    return (
-                      <div
-                        key={player.id}
-                        className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all duration-300 ${
-                          isPodium 
-                            ? 'border-tertiary/20 bg-tertiary/5 shadow-[0_0_15px_rgba(233,196,0,0.03)]' 
-                            : 'border-white/5 bg-white/[0.02]'
-                        }`}
-                      >
-                        <span className={`font-score-display text-[18px] w-7 text-center tabular font-bold ${isPodium ? 'text-tertiary' : 'text-on-surface-variant/40'}`}>
-                          {idx + 1}
-                        </span>
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg shrink-0 border border-white/10 bg-gradient-to-br ${avatar.color} overflow-hidden`}>
-                          {avatar.imagePath ? (
-                            <img src={avatar.imagePath} alt={avatar.name} className="w-full h-full object-cover" />
-                          ) : (
-                            avatar.emoji
-                          )}
-                        </div>
-                        <span className="font-body-md font-bold truncate flex-grow text-white text-[15px]">
-                          {player.username} {player.badgeCount ? ` 🏅${player.badgeCount}` : ''}
-                        </span>
-                        <span className={`font-data-mono text-[14px] font-bold tabular ${isPodium ? 'text-tertiary' : 'text-primary'}`}>
-                          {(player.toilesCoins + player.totalWinnings).toLocaleString()} TC
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* QR Code Card */}
-            <div className="glass-strong border border-white/10 rounded-3xl p-6 shadow-2xl flex items-center gap-6 flex-grow max-h-[38%] relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary-container/20 to-transparent pointer-events-none" />
-              
-              <div className="bg-white p-3 rounded-2xl shadow-[0_0_30px_rgba(43,91,255,0.25)] shrink-0 flex items-center justify-center border-2 border-primary/20 relative z-10 group-hover:scale-105 transition-transform duration-300">
-                {qrUrl ? (
-                  <img src={qrUrl} alt="QR Code" className="w-32 h-32 object-contain" />
-                ) : (
-                  <div className="w-32 h-32 bg-surface-container animate-pulse rounded-xl" />
-                )}
-              </div>
-
-              <div className="text-left space-y-2 relative z-10 flex-grow">
-                <h2 className="font-headline-lg text-[22px] italic uppercase tracking-tighter leading-tight bg-gradient-to-r from-white to-primary bg-clip-text text-transparent font-black">
-                  PRÊT À PARIER ?
-                </h2>
-                <p className="font-body-md text-[13px] text-on-surface-variant leading-relaxed">
-                  Scannez pour rejoindre la partie, choisissez votre pseudo et recevez <strong className="text-white font-bold">1 000 ToilesCoins offerts</strong> !
-                </p>
-                <div className="flex items-center gap-1.5 text-primary pt-1">
-                  <span className="material-symbols-outlined text-[18px]">phone_iphone</span>
-                  <span className="font-label-caps text-[10px] tracking-widest font-bold">100% GRATUIT &amp; INSTANTANÉ</span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
+          {match.status === 'live' && (
+            <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 12, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.05em' }}>
+              {match.elapsedTime}&apos;
+            </span>
+          )}
         </div>
 
-        <GameEventOverlay />
+        {/* Center: LTNBet logo */}
+        <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center leading-none">
+          <div style={{ fontFamily: 'var(--font-anybody)', fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1 }}>
+            <span style={{ fontSize: 30, color: 'white', textShadow: '0 0 30px rgba(255,255,255,0.2)' }}>LTN</span>
+            <span style={{ fontSize: 30, color: ORANGE, textShadow: `0 0 30px rgba(255,107,0,0.6)` }}>Bet</span>
+          </div>
+          <span style={{ fontFamily: 'var(--font-hanken)', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.28em', color: 'rgba(255,255,255,0.38)', marginTop: 1 }}>
+            LIVE STADIUM BROADCAST
+          </span>
+        </div>
 
-        {/* Ticker Bottom Banner */}
-        <div className="absolute bottom-0 left-0 w-full h-[76px] glass-strong border-t border-white/10 flex items-center overflow-hidden z-50">
-          <div className="h-full bg-gradient-to-r from-secondary-container to-[#1e46e0] px-8 flex items-center justify-center z-10 border-r border-white/20 shadow-[10px_0_25px_rgba(0,0,0,0.5)] shrink-0">
-            <span className="font-headline-lg text-[16px] text-white uppercase italic tracking-wider font-extrabold whitespace-nowrap">
-              EN DIRECT DU BAR
-            </span>
+        {/* Right: venue */}
+        <div className="flex items-center justify-end gap-2 w-1/4">
+          <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'rgba(255,255,255,0.3)' }}>stadium</span>
+          <span style={{ fontFamily: 'var(--font-hanken)', fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            Les Toiles Noires
+          </span>
+        </div>
+      </header>
+
+      {/* ══════════════════════════════════════════
+          MAIN GRID — 3 columns
+      ══════════════════════════════════════════ */}
+      <div className="relative z-10 flex-1 grid grid-cols-[280px_1fr_300px] gap-0 overflow-hidden min-h-0">
+
+        {/* ── LEFT PANEL: Live Match Stats ── */}
+        <div
+          className="flex flex-col gap-0 overflow-hidden p-5"
+          style={{ borderRight: '1px solid rgba(255,255,255,0.06)', background: 'rgba(6,10,20,0.7)' }}
+        >
+          <h2 style={{
+            fontFamily: 'var(--font-anybody)', fontSize: 12, fontWeight: 800, letterSpacing: '0.22em',
+            color: 'rgba(255,255,255,0.5)', marginBottom: 16, textTransform: 'uppercase',
+          }}>
+            Live Match Stats
+          </h2>
+
+          {/* Possession donut */}
+          <div className="flex flex-col items-center gap-3 mb-5">
+            <div className="relative">
+              <PossessionDonut home={possHome} />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span style={{ fontFamily: 'var(--font-anywhere)', fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>POSS</span>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, fontFamily: 'var(--font-hanken)', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.55)' }}>
+              POSSESSION
+            </div>
+            <div className="flex gap-6">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-[2px]" style={{ background: ORANGE }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: ORANGE }}>Home {possHome}%</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-[2px]" style={{ background: CYAN }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: CYAN }}>Away {possAway}%</span>
+              </div>
+            </div>
           </div>
 
-          <div className="flex-grow h-full overflow-hidden relative flex items-center">
-            <div className="absolute whitespace-nowrap animate-ticker flex items-center">
-              {[0, 1].map((rep) => (
-                <span key={rep} className="flex items-center gap-20 px-10">
-                  {tickerEvents.length > 0 ? (
-                    tickerEvents.map((evt) => {
-                      const icon = evt.type === 'goal' ? 'sports_soccer' : evt.type === 'badge' ? 'military_tech' : 'info';
-                      const color = evt.type === 'goal' ? 'text-primary' : evt.type === 'badge' ? 'text-error' : 'text-secondary';
-                      return (
-                        <span key={evt.id + '-' + rep} className="flex items-center gap-3">
-                          <span className={`material-symbols-outlined ${color} text-[22px]`} style={{ fontVariationSettings: "'FILL' 1" }}>{icon}</span>
-                          <span className="font-data-mono text-[16px] text-on-surface">
-                            <span className={`font-bold ${color}`}>{evt.title}</span> {evt.subtitle}
-                          </span>
-                        </span>
-                      );
-                    })
-                  ) : (
-                    <>
-                      <span className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-tertiary text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>monetization_on</span>
-                        <span className="font-data-mono text-[16px] text-on-surface">
-                          REJOIGNEZ LA PARTIE EN SCANNANT LE QR CODE ! RECEVEZ 1 000 TOILESCOINS GRATUITS.
-                        </span>
-                      </span>
-                      <span className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-primary text-[22px]">sports_soccer</span>
-                        <span className="font-data-mono text-[16px] text-on-surface">
-                          PRÉDISEZ LE SCORE DU MATCH ET GAGNEZ DES PINTES GRATUITES AU BAR !
-                        </span>
-                      </span>
-                    </>
-                  )}
+          {/* Shots on target */}
+          <div className="mb-5">
+            <div className="flex justify-between mb-2" style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>
+              <span style={{ color: ORANGE }}>Home {match.shotsOnTargetHome}</span>
+              <span>SHOTS ON TARGET</span>
+              <span style={{ color: CYAN }}>Away {match.shotsOnTargetAway}</span>
+            </div>
+            <ShotBars home={match.shotsOnTargetHome} away={match.shotsOnTargetAway} />
+          </div>
+
+          {/* Cards */}
+          <div className="mb-5">
+            <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'rgba(255,255,255,0.4)', marginBottom: 8, textTransform: 'uppercase' }}>
+              Cards:&nbsp;
+              <span style={{ color: ORANGE }}>Home Y-{match.cardsHome} R-0</span>
+              &nbsp;|&nbsp;
+              <span style={{ color: CYAN }}>Away Y-{match.cardsAway} R-0</span>
+            </div>
+            <div className="flex justify-between items-start">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', width: 12 }}>Y</span>
+                  <CardSlots count={Math.min(match.cardsHome, 4)} color="#FFD700" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', width: 12 }}>R</span>
+                  <CardSlots count={0} color="#FF3B3B" />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5 items-end">
+                <div className="flex items-center gap-2 flex-row-reverse">
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', width: 12, textAlign: 'right' }}>Y</span>
+                  <CardSlots count={Math.min(match.cardsAway, 4)} color="#FFD700" />
+                </div>
+                <div className="flex items-center gap-2 flex-row-reverse">
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', width: 12, textAlign: 'right' }}>R</span>
+                  <CardSlots count={0} color="#FF3B3B" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Pass Accuracy + Corner Kicks */}
+          <div className="grid grid-cols-2 gap-2.5 mt-auto">
+            <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize: 8.5, letterSpacing: '0.14em', fontWeight: 700, color: 'rgba(255,255,255,0.35)', marginBottom: 5, textTransform: 'uppercase' }}>
+                Pass Accuracy
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>
+                <span style={{ color: ORANGE }}>{match.passesAccuracyHome}%</span>
+                <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 3px' }}>|</span>
+                <span style={{ color: CYAN }}>{match.passesAccuracyAway}%</span>
+              </div>
+            </div>
+            <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize: 8.5, letterSpacing: '0.14em', fontWeight: 700, color: 'rgba(255,255,255,0.35)', marginBottom: 5, textTransform: 'uppercase' }}>
+                Corner Kicks
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>
+                <span style={{ color: ORANGE }}>{match.cornersHome}</span>
+                <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 3px' }}>|</span>
+                <span style={{ color: CYAN }}>{match.cornersAway}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── CENTER PANEL: Score + Timer ── */}
+        <div className="flex flex-col items-center justify-center gap-4 px-8 relative overflow-hidden">
+          {/* Background orange/cyan glow orbs */}
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-48 h-48 rounded-full pointer-events-none"
+            style={{ background: `radial-gradient(circle, rgba(255,107,0,0.12) 0%, transparent 70%)`, filter: 'blur(20px)' }} />
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-48 h-48 rounded-full pointer-events-none"
+            style={{ background: `radial-gradient(circle, rgba(0,200,255,0.12) 0%, transparent 70%)`, filter: 'blur(20px)' }} />
+
+          {/* Timer */}
+          <div
+            style={{
+              fontFamily: 'var(--font-anybody)', fontSize: 72, fontWeight: 900, lineHeight: 1,
+              color: 'white', letterSpacing: '0.04em',
+              textShadow: '0 0 60px rgba(255,255,255,0.15)',
+            }}
+          >
+            {timerDisplay}
+          </div>
+
+          {/* Teams + Score row */}
+          <div className="flex items-center w-full justify-center gap-6">
+
+            {/* Home team */}
+            <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
+              <div
+                className="w-24 h-24 rounded-full flex items-center justify-center shrink-0"
+                style={{
+                  background: 'rgba(255,107,0,0.12)',
+                  border: `2.5px solid ${ORANGE}`,
+                  boxShadow: `0 0 35px rgba(255,107,0,0.35), inset 0 0 20px rgba(255,107,0,0.08)`,
+                  fontSize: 52,
+                }}
+              >
+                {flagFor(match.homeTeam) || '⚽'}
+              </div>
+              <span style={{
+                fontFamily: 'var(--font-anybody)', fontSize: 20, fontWeight: 800, textTransform: 'uppercase',
+                letterSpacing: '0.05em', textAlign: 'center', lineHeight: 1.1,
+                color: 'white', textShadow: `0 0 20px rgba(255,107,0,0.3)`,
+                wordBreak: 'break-word',
+              }}>
+                {match.homeTeam || 'HOME TEAM'}
+              </span>
+            </div>
+
+            {/* Score */}
+            <div className="flex items-center gap-3 shrink-0">
+              <span style={{
+                fontFamily: 'var(--font-anybody)', fontSize: 96, fontWeight: 900, lineHeight: 1,
+                color: ORANGE, textShadow: `0 0 50px rgba(255,107,0,0.6)`,
+              }}>
+                {match.homeScore}
+              </span>
+              <span style={{
+                fontFamily: 'var(--font-anybody)', fontSize: 52, fontWeight: 300,
+                color: 'rgba(255,255,255,0.18)',
+              }}>
+                -
+              </span>
+              <span style={{
+                fontFamily: 'var(--font-anybody)', fontSize: 96, fontWeight: 900, lineHeight: 1,
+                color: 'white', textShadow: `0 0 50px rgba(0,200,255,0.35)`,
+              }}>
+                {match.awayScore}
+              </span>
+            </div>
+
+            {/* Away team */}
+            <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
+              <div
+                className="w-24 h-24 rounded-full flex items-center justify-center shrink-0"
+                style={{
+                  background: 'rgba(0,200,255,0.12)',
+                  border: `2.5px solid ${CYAN}`,
+                  boxShadow: `0 0 35px rgba(0,200,255,0.35), inset 0 0 20px rgba(0,200,255,0.08)`,
+                  fontSize: 52,
+                }}
+              >
+                {flagFor(match.awayTeam) || '⚽'}
+              </div>
+              <span style={{
+                fontFamily: 'var(--font-anybody)', fontSize: 20, fontWeight: 800, textTransform: 'uppercase',
+                letterSpacing: '0.05em', textAlign: 'center', lineHeight: 1.1,
+                color: CYAN, textShadow: `0 0 20px rgba(0,200,255,0.4)`,
+                wordBreak: 'break-word',
+              }}>
+                {match.awayTeam || 'AWAY TEAM'}
+              </span>
+            </div>
+          </div>
+
+          {/* Match info stripe */}
+          <div
+            className="px-8 py-2 rounded-full flex items-center gap-3 mt-2"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'rgba(255,255,255,0.3)' }}>sports_soccer</span>
+            <span style={{ fontFamily: 'var(--font-hanken)', fontSize: 11, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+              LTN BET LIVE
+            </span>
+            <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+            <span style={{ fontFamily: 'var(--font-hanken)', fontSize: 11, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+              LES TOILES NOIRES
+            </span>
+          </div>
+        </div>
+
+        {/* ── RIGHT PANEL: Leaderboard ── */}
+        <div
+          className="flex flex-col overflow-hidden"
+          style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', background: 'rgba(6,10,20,0.7)' }}
+        >
+          {/* Header */}
+          <div className="px-5 pt-5 pb-4 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+            <h2 style={{ fontFamily: 'var(--font-anybody)', fontSize: 16, fontWeight: 800, color: 'white', letterSpacing: '0.08em', lineHeight: 1 }}>
+              LIVE LEADERBOARD
+            </h2>
+            <p style={{ fontSize: 10, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.38)', marginTop: 3, fontWeight: 700 }}>
+              TOP 10 PLAYERS
+            </p>
+          </div>
+
+          {/* Podium — Top 3 */}
+          <div className="px-4 py-3 flex flex-col gap-2 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            {top10.slice(0, 3).map((player, i) => (
+              <div
+                key={player.id}
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2"
+                style={{
+                  background: i === 0 ? 'rgba(255,215,0,0.07)' : 'rgba(255,255,255,0.025)',
+                  border: `1px solid ${i === 0 ? 'rgba(255,215,0,0.22)' : i === 1 ? 'rgba(192,192,192,0.15)' : 'rgba(205,127,50,0.15)'}`,
+                  boxShadow: i === 0 ? MEDAL_GLOWS[0] : 'none',
+                }}
+              >
+                {/* Medal circle */}
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 font-black"
+                  style={{
+                    background: MEDAL_COLORS[i],
+                    color: '#000',
+                    fontSize: 13,
+                    boxShadow: MEDAL_GLOWS[i],
+                    fontFamily: 'var(--font-anybody)',
+                  }}
+                >
+                  {i + 1}
+                </div>
+                <Avatar player={player} size={28} />
+                <span className="flex-1 font-bold truncate" style={{ fontSize: 13 }}>{player.username}</span>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 12, fontWeight: 700, color: MEDAL_COLORS[i], flexShrink: 0 }}>
+                  {(player.toilesCoins + player.totalWinnings).toLocaleString()} pts
                 </span>
-              ))}
-            </div>
-            <div className="absolute right-0 top-0 w-32 h-full bg-gradient-to-l from-[#070b16] to-transparent z-10 pointer-events-none" />
+              </div>
+            ))}
+          </div>
+
+          {/* Ranked list — 4 to 10 */}
+          <div className="flex-1 overflow-hidden px-3 py-3 flex flex-col gap-1.5">
+            {top10.slice(3).map((player, i) => (
+              <div key={player.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 11, color: 'rgba(255,255,255,0.35)', width: 18, textAlign: 'right', flexShrink: 0 }}>
+                  {i + 4}.
+                </span>
+                <Avatar player={player} size={24} />
+                <span className="flex-1 truncate" style={{ fontSize: 13, fontWeight: 600 }}>{player.username}</span>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 12, fontWeight: 700, color: '#7da4ff', flexShrink: 0 }}>
+                  {(player.toilesCoins + player.totalWinnings).toLocaleString()} pts
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════
+          BOTTOM: TICKER + QR CODE
+      ══════════════════════════════════════════ */}
+      <div
+        className="relative z-10 flex shrink-0 overflow-hidden"
+        style={{ height: 68, background: 'rgba(4,8,16,0.97)', borderTop: '1px solid rgba(255,255,255,0.07)' }}
+      >
+        {/* Breaking News label */}
+        <div
+          className="flex items-center px-5 shrink-0"
+          style={{ background: 'rgba(255,107,0,0.14)', borderRight: `2px solid ${ORANGE}` }}
+        >
+          <span style={{
+            fontFamily: 'var(--font-anybody)', fontSize: 11, fontWeight: 900,
+            letterSpacing: '0.18em', color: ORANGE, textTransform: 'uppercase', whiteSpace: 'nowrap',
+          }}>
+            BREAKING NEWS
+          </span>
+        </div>
+
+        {/* Scrolling ticker text */}
+        <div className="flex-1 overflow-hidden relative flex items-center">
+          <div className="absolute whitespace-nowrap animate-ticker flex items-center">
+            {[0, 1].map(rep => (
+              <span key={rep} className="flex items-center gap-16 px-8">
+                {tickerEvents.length > 0 ? (
+                  tickerEvents.map(evt => (
+                    <span key={`${evt.id}-${rep}`} className="flex items-center gap-3">
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 14, color: ORANGE, fontWeight: 700 }}>
+                        {evt.title}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>
+                        {evt.subtitle}
+                      </span>
+                      <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 20 }}>·</span>
+                    </span>
+                  ))
+                ) : (
+                  <>
+                    <span className="flex items-center gap-3">
+                      <span style={{ fontFamily: 'var(--font-anybody)', fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', color: ORANGE }}>NEXT MATCH:</span>
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>
+                        {match.homeTeam && match.awayTeam
+                          ? `${match.homeTeam.toUpperCase()} vs. ${match.awayTeam.toUpperCase()} — PARIEZ MAINTENANT!`
+                          : 'REJOIGNEZ LA PARTIE EN SCANNANT LE QR CODE!'}
+                      </span>
+                    </span>
+                    <span style={{ color: 'rgba(255,255,255,0.15)', margin: '0 20px' }}>·</span>
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>
+                      RECEVEZ 1 000 TOILESCOINS GRATUITS EN REJOIGNANT LA PARTIE!
+                    </span>
+                    <span style={{ color: 'rgba(255,255,255,0.15)', margin: '0 20px' }}>·</span>
+                  </>
+                )}
+              </span>
+            ))}
+          </div>
+          {/* Fade edges */}
+          <div className="absolute left-0 top-0 w-8 h-full pointer-events-none" style={{ background: 'linear-gradient(to right, rgba(4,8,16,0.97), transparent)' }} />
+          <div className="absolute right-0 top-0 w-16 h-full pointer-events-none" style={{ background: 'linear-gradient(to left, rgba(4,8,16,0.97), transparent)' }} />
+        </div>
+
+        {/* QR Code section */}
+        <div
+          className="flex items-center gap-3 px-4 shrink-0"
+          style={{ borderLeft: '1px solid rgba(255,255,255,0.07)' }}
+        >
+          <div style={{ background: 'white', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {qrUrl ? (
+              <img src={qrUrl} alt="QR Code" style={{ width: 44, height: 44, display: 'block' }} />
+            ) : (
+              <div className="animate-pulse" style={{ width: 44, height: 44, background: '#e0e0e0', borderRadius: 4 }} />
+            )}
+          </div>
+          <div style={{ fontSize: 8.5, letterSpacing: '0.11em', color: 'rgba(255,255,255,0.4)', fontWeight: 700, lineHeight: 1.5, textTransform: 'uppercase' }}>
+            SCAN FOR<br />LIVE INTERACTION<br />&amp; BETTING
+          </div>
+        </div>
+      </div>
+
+      <GameEventOverlay />
     </div>
   );
 }
-
-function ComparisonStat({ label, leftVal, rightVal, leftLabel, rightLabel }: { label: string; leftVal: number; rightVal: number; leftLabel?: string; rightLabel?: string }) {
-  const total = leftVal + rightVal || 1;
-  const pctLeft = (leftVal / total) * 100;
-  return (
-    <div>
-      <div className="flex justify-between font-data-mono text-[13px] text-white mb-1">
-        <span className="text-primary font-bold tabular">{leftLabel ?? leftVal}</span>
-        <span className="font-label-caps text-[10px] text-on-surface-variant tracking-wider font-bold">{label}</span>
-        <span className="tabular text-white font-bold">{rightLabel ?? rightVal}</span>
-      </div>
-      <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden flex border border-white/5">
-        <div className="h-full bg-primary transition-all duration-500" style={{ width: `${pctLeft}%` }} />
-        <div className="h-full bg-white/20 transition-all duration-500 flex-grow" style={{ width: `${100 - pctLeft}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function TvStat({ label, left, right, pct }: { label: string; left: string; right: string; pct: number }) {
-  return (
-    <div>
-      <div className="flex justify-between font-data-mono text-[14px] text-white mb-1.5">
-        <span className="text-primary font-bold tabular">{left}</span>
-        <span className="font-label-caps text-[10px] text-on-surface-variant tracking-wider font-bold">{label}</span>
-        <span className="tabular text-on-surface-variant">{right}</span>
-      </div>
-      <div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-        <div className="h-full bg-gradient-to-r from-secondary-container to-primary rounded-full transition-all duration-500" style={{ width: `${Math.max(2, Math.min(100, pct))}%` }} />
-      </div>
-    </div>
-  );
-}
-

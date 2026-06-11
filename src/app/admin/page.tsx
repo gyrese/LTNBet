@@ -5,8 +5,6 @@ import { useGameStore } from '@/lib/store';
 import StartSessionModal from '@/components/admin/StartSessionModal';
 import PresencePanel from '@/components/admin/PresencePanel';
 
-const ADMIN_PASSWORD = 'toiles2024';
-
 export default function AdminPage() {
   const {
     match,
@@ -77,19 +75,31 @@ export default function AdminPage() {
 
   if (!mounted) return null;
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pwInput === ADMIN_PASSWORD) {
-      sessionStorage.setItem('ltn_admin_ok', '1');
-      setAdminUnlocked(true);
-      setPwError('');
-    } else {
-      setPwError('Mot de passe incorrect.');
+    // Validation côté serveur : le mot de passe saisi EST le secret admin (jamais dans le bundle).
+    try {
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-secret': pwInput },
+        body: JSON.stringify({ op: 'admin_check' }),
+      });
+      if (res.ok) {
+        sessionStorage.setItem('ltn_admin_ok', '1');
+        sessionStorage.setItem('ltn_admin_secret', pwInput); // réutilisé par toutes les requêtes admin
+        setAdminUnlocked(true);
+        setPwError('');
+      } else {
+        setPwError('Mot de passe incorrect.');
+      }
+    } catch {
+      setPwError('Erreur réseau, réessayez.');
     }
   };
 
   const handleLockAdmin = () => {
     sessionStorage.removeItem('ltn_admin_ok');
+    sessionStorage.removeItem('ltn_admin_secret');
     setAdminUnlocked(false);
     setPwInput('');
   };

@@ -46,7 +46,12 @@ export default function JoinPage() {
     if (trimmed.length > 15) return setError('Le pseudo ne peut pas dépasser 15 caractères.');
 
     setLoading(true);
-    await registerUser(trimmed, selectedAvatar);
+    const res = await registerUser(trimmed, selectedAvatar);
+    if (!res.success) {
+      setError(res.error || 'Inscription impossible, réessaie.');
+      setLoading(false);
+      return;
+    }
     router.push('/');
   };
 
@@ -121,7 +126,7 @@ export default function JoinPage() {
                 initial={{ opacity: 0, scale: 0.8, rotate: -8 }}
                 animate={{ opacity: 1, scale: 1, rotate: 0 }}
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                className={`w-24 h-24 rounded-full bg-gradient-to-br ${currentAvatar.color} flex items-center justify-center text-4xl shadow-inner border border-white/10 overflow-hidden glow-accent`}
+                className={`w-28 h-28 rounded-full bg-gradient-to-br ${currentAvatar.color} flex items-center justify-center text-5xl overflow-hidden shadow-[inset_0_4px_12px_rgba(255,255,255,0.3),_0_12px_28px_rgba(0,0,0,0.6)] border-4 border-t-white/25 border-r-white/15 border-b-black/45 border-l-black/25 glow-accent`}
               >
                 {currentAvatar.imagePath ? (
                   <img src={currentAvatar.imagePath} alt={currentAvatar.name} className="w-full h-full object-cover" />
@@ -129,11 +134,6 @@ export default function JoinPage() {
                   currentAvatar.emoji
                 )}
               </motion.div>
-
-              <span className="font-label-caps text-[12px] text-white tracking-wide flex items-center gap-1.5">
-                <span aria-hidden>{currentAvatar.emoji}</span>
-                {currentAvatar.name}
-              </span>
 
               <button
                 type="button"

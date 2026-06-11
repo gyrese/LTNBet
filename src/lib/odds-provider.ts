@@ -238,6 +238,30 @@ export interface ParsedOdds {
   bttsYes: number | null;
   bttsNo: number | null;
   correctScores: Record<string, number>; // ex: { "1-0": 3.5 }
+  scorers: Array<{ name: string; odds: number }>;
+
+  // Double Chance
+  dc1X: number | null;
+  dcX2: number | null;
+  dc12: number | null;
+
+  // Goals Totals
+  ou15Over: number | null;
+  ou15Under: number | null;
+  ou35Over: number | null;
+  ou35Under: number | null;
+
+  // Team Totals (Mexico / South Africa Over/Under 1.5)
+  homeOver15: number | null;
+  homeUnder15: number | null;
+  awayOver15: number | null;
+  awayUnder15: number | null;
+
+  // Team Totals (Mexico / South Africa Clean Sheet = Team Totals Under/Over 0.5)
+  homeOver05: number | null;
+  homeUnder05: number | null;
+  awayOver05: number | null;
+  awayUnder05: number | null;
 }
 
 const EMPTY_PARSED: ParsedOdds = {
@@ -247,10 +271,16 @@ const EMPTY_PARSED: ParsedOdds = {
   ou25Over: null, ou25Under: null,
   bttsYes: null, bttsNo: null,
   correctScores: {},
+  scorers: [],
+
+  dc1X: null, dcX2: null, dc12: null,
+  ou15Over: null, ou15Under: null, ou35Over: null, ou35Under: null,
+  homeOver15: null, homeUnder15: null, awayOver15: null, awayUnder15: null,
+  homeOver05: null, homeUnder05: null, awayOver05: null, awayUnder05: null,
 };
 
 function parseBookmakerMarkets(markets: OddsMarket[], homeTeam: string, awayTeam: string): ParsedOdds {
-  const out: ParsedOdds = { ...EMPTY_PARSED, correctScores: {} };
+  const out: ParsedOdds = { ...EMPTY_PARSED, correctScores: {}, scorers: [] };
   const norm = (s: string) => s.toLowerCase().replace(/\s*\(w\)\s*/g, '').trim();
   const home = norm(homeTeam);
   const away = norm(awayTeam);
@@ -277,12 +307,22 @@ function parseBookmakerMarkets(markets: OddsMarket[], homeTeam: string, awayTeam
         else if (label.includes(away) || label === '2') out.htResultAway = odd;
       }
     }
-    // Plus / Moins de buts (ligne 2.5)
-    else if (name === 'goals over/under') {
-      const r = rows.find((x) => Number(x.hdp) === 2.5);
-      if (r) {
-        out.ou25Over = num(r.over);
-        out.ou25Under = num(r.under);
+    // Plus / Moins de buts (lignes 1.5, 2.5, 3.5)
+    else if (name === 'goals over/under' || name === 'totals') {
+      const r15 = rows.find((x) => Number(x.hdp) === 1.5);
+      if (r15) {
+        out.ou15Over = num(r15.over);
+        out.ou15Under = num(r15.under);
+      }
+      const r25 = rows.find((x) => Number(x.hdp) === 2.5);
+      if (r25) {
+        out.ou25Over = num(r25.over);
+        out.ou25Under = num(r25.under);
+      }
+      const r35 = rows.find((x) => Number(x.hdp) === 3.5);
+      if (r35) {
+        out.ou35Over = num(r35.over);
+        out.ou35Under = num(r35.under);
       }
     }
     // Les deux équipes marquent
@@ -303,14 +343,57 @@ function parseBookmakerMarkets(markets: OddsMarket[], homeTeam: string, awayTeam
         if (label && odd && /^\d+-\d+$/.test(label)) out.correctScores[label] = odd;
       }
     }
+    // Double Chance
+    else if (name === 'double chance') {
+      const r = rows[0] || {};
+      out.dc1X = num(r['1X'] ?? r['home_draw'] ?? r.homeDraw);
+      out.dcX2 = num(r['X2'] ?? r['draw_away'] ?? r['2X'] ?? r.drawAway);
+      out.dc12 = num(r['12'] ?? r['home_away'] ?? r.homeAway);
+    }
+    // Team Total Home (Mexique Over/Under)
+    else if (name === 'team total home') {
+      const r05 = rows.find((x) => Number(x.hdp) === 0.5);
+      if (r05) {
+        out.homeOver05 = num(r05.over);
+        out.homeUnder05 = num(r05.under);
+      }
+      const r15 = rows.find((x) => Number(x.hdp) === 1.5);
+      if (r15) {
+        out.homeOver15 = num(r15.over);
+        out.homeUnder15 = num(r15.under);
+      }
+    }
+    // Team Total Away (Afrique du Sud Over/Under)
+    else if (name === 'team total away') {
+      const r05 = rows.find((x) => Number(x.hdp) === 0.5);
+      if (r05) {
+        out.awayOver05 = num(r05.over);
+        out.awayUnder05 = num(r05.under);
+      }
+      const r15 = rows.find((x) => Number(x.hdp) === 1.5);
+      if (r15) {
+        out.awayOver15 = num(r15.over);
+        out.awayUnder15 = num(r15.under);
+      }
+    }
+    // Buteur à tout moment
+    else if (name === 'anytime goalscorer' || name === 'anytime scorer' || name === 'anytime scorers') {
+      for (const r of rows) {
+        const playerName = String(r.label ?? '').trim();
+        const odd = num(r.over ?? r.odds ?? r.value ?? r.under);
+        if (playerName && odd) {
+          out.scorers.push({ name: playerName, odds: odd });
+        }
+      }
+    }
   }
 
   return out;
 }
 
 /**
- * Récupère et normalise les cotes d'un event. Choisit le 1er bookmaker préféré disponible
- * dans la réponse (ignore les variantes « no latency »).
+ * Récupère et normalise les cotes d'un event. Fait une fusion par marché (per-market fallback)
+ * en parcourant les bookmakers dans l'ordre de préférence.
  */
 export async function getParsedOdds(eventId: number | string): Promise<ParsedOdds> {
   const raw = await fetchRawOdds(eventId, getPreferredBookmakers());
@@ -320,14 +403,120 @@ export async function getParsedOdds(eventId: number | string): Promise<ParsedOdd
   const names = Object.keys(bms);
   if (!names.length) return EMPTY_PARSED;
 
-  // Priorité : bookmaker préféré, sinon premier non « no latency », sinon premier.
+  // Tri des bookmakers par préférence
   const prefer = getPreferredBookmakers();
-  const pick =
-    prefer.find((p) => names.includes(p)) ||
-    names.find((n) => !/no latency/i.test(n)) ||
-    names[0];
+  const orderedBookmakers = [
+    ...prefer.filter((p) => names.includes(p)),
+    ...names.filter((n) => !prefer.includes(n) && !/no latency/i.test(n)),
+    ...names.filter((n) => !prefer.includes(n) && /no latency/i.test(n)),
+  ];
 
-  const parsed = parseBookmakerMarkets(bms[pick] || [], raw.home, raw.away);
-  parsed.bookmaker = pick;
+  const parsed: ParsedOdds = {
+    bookmaker: null,
+    resultHome: null, resultDraw: null, resultAway: null,
+    htResultHome: null, htResultDraw: null, htResultAway: null,
+    ou25Over: null, ou25Under: null,
+    bttsYes: null, bttsNo: null,
+    correctScores: {},
+    scorers: [],
+
+    dc1X: null, dcX2: null, dc12: null,
+    ou15Over: null, ou15Under: null, ou35Over: null, ou35Under: null,
+    homeOver15: null, homeUnder15: null, awayOver15: null, awayUnder15: null,
+    homeOver05: null, homeUnder05: null, awayOver05: null, awayUnder05: null,
+  };
+
+  let mainBookmaker: string | null = null;
+  const bookmakersUsed: string[] = [];
+
+  for (const bm of orderedBookmakers) {
+    const bmMarkets = bms[bm] || [];
+    const parsedBm = parseBookmakerMarkets(bmMarkets, raw.home, raw.away);
+    let addedSomething = false;
+
+    // Merge 1X2
+    if (parsed.resultHome === null && parsedBm.resultHome !== null) {
+      parsed.resultHome = parsedBm.resultHome;
+      parsed.resultDraw = parsedBm.resultDraw;
+      parsed.resultAway = parsedBm.resultAway;
+      addedSomething = true;
+      if (!mainBookmaker) mainBookmaker = bm;
+    }
+    // Merge HT result
+    if (parsed.htResultHome === null && parsedBm.htResultHome !== null) {
+      parsed.htResultHome = parsedBm.htResultHome;
+      parsed.htResultDraw = parsedBm.htResultDraw;
+      parsed.htResultAway = parsedBm.htResultAway;
+      addedSomething = true;
+    }
+    // Merge Over/Under 2.5
+    if (parsed.ou25Over === null && parsedBm.ou25Over !== null) {
+      parsed.ou25Over = parsedBm.ou25Over;
+      parsed.ou25Under = parsedBm.ou25Under;
+      addedSomething = true;
+    }
+    // Merge BTTS
+    if (parsed.bttsYes === null && parsedBm.bttsYes !== null) {
+      parsed.bttsYes = parsedBm.bttsYes;
+      parsed.bttsNo = parsedBm.bttsNo;
+      addedSomething = true;
+    }
+    // Merge Correct Score
+    if (Object.keys(parsed.correctScores).length === 0 && Object.keys(parsedBm.correctScores).length > 0) {
+      parsed.correctScores = parsedBm.correctScores;
+      addedSomething = true;
+    }
+    // Merge Double Chance
+    if (parsed.dc1X === null && parsedBm.dc1X !== null) {
+      parsed.dc1X = parsedBm.dc1X;
+      parsed.dcX2 = parsedBm.dcX2;
+      parsed.dc12 = parsedBm.dc12;
+      addedSomething = true;
+    }
+    // Merge Totals 1.5 / 3.5
+    if (parsed.ou15Over === null && parsedBm.ou15Over !== null) {
+      parsed.ou15Over = parsedBm.ou15Over;
+      parsed.ou15Under = parsedBm.ou15Under;
+      addedSomething = true;
+    }
+    if (parsed.ou35Over === null && parsedBm.ou35Over !== null) {
+      parsed.ou35Over = parsedBm.ou35Over;
+      parsed.ou35Under = parsedBm.ou35Under;
+      addedSomething = true;
+    }
+    // Merge Team Totals 1.5
+    if (parsed.homeOver15 === null && parsedBm.homeOver15 !== null) {
+      parsed.homeOver15 = parsedBm.homeOver15;
+      parsed.homeUnder15 = parsedBm.homeUnder15;
+      addedSomething = true;
+    }
+    if (parsed.awayOver15 === null && parsedBm.awayOver15 !== null) {
+      parsed.awayOver15 = parsedBm.awayOver15;
+      parsed.awayUnder15 = parsedBm.awayUnder15;
+      addedSomething = true;
+    }
+    // Merge Team Totals 0.5
+    if (parsed.homeOver05 === null && parsedBm.homeOver05 !== null) {
+      parsed.homeOver05 = parsedBm.homeOver05;
+      parsed.homeUnder05 = parsedBm.homeUnder05;
+      addedSomething = true;
+    }
+    if (parsed.awayOver05 === null && parsedBm.awayOver05 !== null) {
+      parsed.awayOver05 = parsedBm.awayOver05;
+      parsed.awayUnder05 = parsedBm.awayUnder05;
+      addedSomething = true;
+    }
+    // Merge Scorers
+    if (parsed.scorers.length === 0 && parsedBm.scorers.length > 0) {
+      parsed.scorers = parsedBm.scorers;
+      addedSomething = true;
+    }
+
+    if (addedSomething) {
+      bookmakersUsed.push(bm);
+    }
+  }
+
+  parsed.bookmaker = bookmakersUsed.join(' + ') || mainBookmaker || orderedBookmakers[0] || null;
   return parsed;
 }

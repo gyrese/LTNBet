@@ -46,3 +46,19 @@ export function countOnline(): number {
     .get(cutoffISO()) as { c: number };
   return row.c;
 }
+
+/** Retourne la liste des joueurs actifs pour le classement (bots + joueurs connectés ou ayant parié sur le match). */
+export function getActiveLeaderboardPlayers(matchId: string): Row[] {
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  return db
+    .prepare(
+      `SELECT p.*, (SELECT COUNT(*) FROM player_badges pb WHERE pb.player_id = p.id) as badge_count
+       FROM players p
+       WHERE p.is_bot = 1
+          OR p.last_seen >= ?
+          OR EXISTS (SELECT 1 FROM bets b WHERE b.user_id = p.id AND b.match_id = ?)
+       ORDER BY p.rank`,
+    )
+    .all(cutoff, matchId || '') as Row[];
+}
+

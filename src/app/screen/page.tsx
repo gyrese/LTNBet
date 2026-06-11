@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useGameStore } from '@/lib/store';
 import QRCode from 'qrcode';
 import { getAvatarConfig } from '@/lib/avatars';
-import { flagFor } from '@/lib/flags';
+import TeamFlag from '@/components/TeamFlag';
 import GameEventOverlay from '@/components/GameEventOverlay';
 
 const ORANGE = '#FF6B00';
@@ -371,7 +371,7 @@ export default function BroadcastScreen() {
             {/* Home team */}
             <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
               <div
-                className="w-24 h-24 rounded-full flex items-center justify-center shrink-0"
+                className="w-24 h-24 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
                 style={{
                   background: 'rgba(255,107,0,0.12)',
                   border: `2.5px solid ${ORANGE}`,
@@ -379,7 +379,7 @@ export default function BroadcastScreen() {
                   fontSize: 52,
                 }}
               >
-                {flagFor(match.homeTeam) || '⚽'}
+                <TeamFlag team={match.homeTeam} className="w-full h-full object-cover" />
               </div>
               <span style={{
                 fontFamily: 'var(--font-anybody)', fontSize: 20, fontWeight: 800, textTransform: 'uppercase',
@@ -416,7 +416,7 @@ export default function BroadcastScreen() {
             {/* Away team */}
             <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
               <div
-                className="w-24 h-24 rounded-full flex items-center justify-center shrink-0"
+                className="w-24 h-24 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
                 style={{
                   background: 'rgba(0,200,255,0.12)',
                   border: `2.5px solid ${CYAN}`,
@@ -424,7 +424,7 @@ export default function BroadcastScreen() {
                   fontSize: 52,
                 }}
               >
-                {flagFor(match.awayTeam) || '⚽'}
+                <TeamFlag team={match.awayTeam} className="w-full h-full object-cover" />
               </div>
               <span style={{
                 fontFamily: 'var(--font-anybody)', fontSize: 20, fontWeight: 800, textTransform: 'uppercase',

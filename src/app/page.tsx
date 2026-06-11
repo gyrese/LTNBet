@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, Market, Outcome } from '@/lib/store';
-import { flagFor } from '@/lib/flags';
+import TeamFlag from '@/components/TeamFlag';
 import Navigation from '@/components/Navigation';
 import GameEventOverlay from '@/components/GameEventOverlay';
 
@@ -168,14 +168,14 @@ export default function HomePage() {
               {/* Home */}
               <div className="flex flex-col items-center gap-3 flex-1">
                 <div
-                  className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-4xl md:text-5xl border"
+                  className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-4xl md:text-5xl border overflow-hidden"
                   style={{
                     background: 'rgba(255,80,0,0.10)',
                     borderColor: 'rgba(255,80,0,0.20)',
                     boxShadow: '0 8px 24px -8px rgba(255,80,0,0.25)',
                   }}
                 >
-                  <span className="relative">{flagFor(match.homeTeam)}</span>
+                  <TeamFlag team={match.homeTeam} className="w-full h-full object-cover" fallbackClassName="relative" />
                 </div>
                 <span
                   className="font-body-md text-[16px] md:text-[20px] font-bold text-center leading-tight"
@@ -201,14 +201,14 @@ export default function HomePage() {
               {/* Away */}
               <div className="flex flex-col items-center gap-3 flex-1">
                 <div
-                  className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-4xl md:text-5xl border"
+                  className="relative w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-4xl md:text-5xl border overflow-hidden"
                   style={{
                     background: 'rgba(26,143,255,0.10)',
                     borderColor: 'rgba(26,143,255,0.20)',
                     boxShadow: '0 8px 24px -8px rgba(26,143,255,0.25)',
                   }}
                 >
-                  <span className="relative">{flagFor(match.awayTeam)}</span>
+                  <TeamFlag team={match.awayTeam} className="w-full h-full object-cover" fallbackClassName="relative" />
                 </div>
                 <span
                   className="font-body-md text-[16px] md:text-[20px] font-bold text-center leading-tight"

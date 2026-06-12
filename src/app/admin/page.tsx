@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useGameStore } from '@/lib/store';
 import StartSessionModal from '@/components/admin/StartSessionModal';
 import PresencePanel from '@/components/admin/PresencePanel';
+import TeamFlag from '@/components/TeamFlag';
+import { logoForTeam } from '@/lib/flags';
 
 export default function AdminPage() {
   const {
@@ -58,6 +60,15 @@ export default function AdminPage() {
     setTimeout(() => setSessionSuccess(''), 4000);
   };
 
+  // Logos d'équipes (clubs + drapeaux personnalisés)
+  const [teamLogos, setTeamLogos] = useState<Record<string, string>>({});
+  const [logoFormTeam, setLogoFormTeam] = useState('');
+  const [logoFormUrl, setLogoFormUrl] = useState('');
+  const [logoSearchQ, setLogoSearchQ] = useState('');
+  const [logoSearchResults, setLogoSearchResults] = useState<{ id: string; name: string; badge: string | null; league: string | null; country: string | null }[]>([]);
+  const [logoSaving, setLogoSaving] = useState(false);
+  const [logoSearching, setLogoSearching] = useState(false);
+
   // L'admin est INDÉPENDANT des comptes joueurs : accès via l'URL /admin + mot de passe (session navigateur).
   const [mounted, setMounted] = useState(false);
   const [adminUnlocked, setAdminUnlocked] = useState(false);
@@ -66,14 +77,60 @@ export default function AdminPage() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const fetchTeamLogos = useCallback(async () => {
+    try {
+      const r = await fetch('/api/team-logos');
+      if (r.ok) setTeamLogos(await r.json());
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     setMounted(true);
     if (typeof window !== 'undefined' && sessionStorage.getItem('ltn_admin_ok') === '1') {
       setAdminUnlocked(true);
     }
-  }, []);
+    fetchTeamLogos();
+  }, [fetchTeamLogos]);
 
   if (!mounted) return null;
+
+  const adminSec = () => sessionStorage.getItem('ltn_admin_secret') ?? '';
+
+  const saveLogoOverride = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!logoFormTeam.trim() || !logoFormUrl.trim()) return;
+    setLogoSaving(true);
+    try {
+      const r = await fetch('/api/team-logos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSec() },
+        body: JSON.stringify({ team: logoFormTeam.trim(), logoUrl: logoFormUrl.trim() }),
+      });
+      if (r.ok) { setLogoFormTeam(''); setLogoFormUrl(''); fetchTeamLogos(); }
+    } finally { setLogoSaving(false); }
+  };
+
+  const deleteLogoOverride = async (team: string) => {
+    await fetch('/api/team-logos', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSec() },
+      body: JSON.stringify({ team }),
+    });
+    fetchTeamLogos();
+  };
+
+  const searchSportsDB = async () => {
+    if (!logoSearchQ.trim()) return;
+    setLogoSearching(true);
+    setLogoSearchResults([]);
+    try {
+      const r = await fetch(`/api/team-logos/search?q=${encodeURIComponent(logoSearchQ)}`);
+      if (r.ok) {
+        const d = await r.json() as { teams: typeof logoSearchResults };
+        setLogoSearchResults(d.teams ?? []);
+      }
+    } finally { setLogoSearching(false); }
+  };
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -270,7 +327,7 @@ export default function AdminPage() {
         {/* No active match section */}
         {!hasActiveMatch && (
           <section className="glass-panel rounded-3xl p-12 text-center max-w-xl mx-auto space-y-6 border border-white/8">
-            <div className="w-20 h-20 mx-auto rounded-3xl bg-white/[0.02] border border-white/10 flex items-center justify-center">
+            <div className="w-20 h-20 mx-auto rounded-3xl bg-white/2 border border-white/10 flex items-center justify-center">
               <span className="material-symbols-outlined text-[44px] text-on-surface-variant/40">sports_soccer</span>
             </div>
             <div className="space-y-2">
@@ -324,13 +381,18 @@ export default function AdminPage() {
                 </div>
 
                 {/* Score and Stats block */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white/[0.02] border border-white/6 rounded-2xl p-5 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white/2 border border-white/6 rounded-2xl p-5 items-center">
                   
                   {/* Score Board and Controls */}
                   <div className="flex justify-center items-center gap-4 md:col-span-2">
                     {/* Home Team */}
                     <div className="text-right flex-1">
-                      <span className="block font-label-caps text-[11px] text-on-surface-variant truncate">{match.homeTeam}</span>
+                      <div className="flex items-center justify-end gap-2 mb-1">
+                        <span className="font-label-caps text-[11px] text-on-surface-variant truncate">{match.homeTeam}</span>
+                        <div className="w-9 h-6 overflow-hidden rounded shrink-0 bg-white/4 border border-white/10">
+                          <TeamFlag team={match.homeTeam} logoUrl={logoForTeam(match.homeTeam, teamLogos)} className="w-full h-full object-cover" fallbackClassName="text-base leading-6 block text-center" />
+                        </div>
+                      </div>
                       <div className="flex items-center justify-end gap-2 mt-2">
                         <button
                           onClick={() => updateMatchStats({ homeScore: Math.max(0, match.homeScore - 1) })}
@@ -352,11 +414,16 @@ export default function AdminPage() {
 
                     {/* Away Team */}
                     <div className="text-left flex-1">
-                      <span className="block font-label-caps text-[11px] text-on-surface-variant truncate">{match.awayTeam}</span>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-9 h-6 overflow-hidden rounded shrink-0 bg-white/4 border border-white/10">
+                          <TeamFlag team={match.awayTeam} logoUrl={logoForTeam(match.awayTeam, teamLogos)} className="w-full h-full object-cover" fallbackClassName="text-base leading-6 block text-center" />
+                        </div>
+                        <span className="font-label-caps text-[11px] text-on-surface-variant truncate">{match.awayTeam}</span>
+                      </div>
                       <div className="flex items-center justify-start gap-2 mt-2">
                         <button
                           onClick={() => triggerGoal('away')}
-                          className="bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 w-8 h-8 rounded-lg font-bold cursor-pointer text-sm flex items-center justify-center"
+                          className="bg-white/6 hover:bg-white/12 border border-white/10 w-8 h-8 rounded-lg font-bold cursor-pointer text-sm flex items-center justify-center"
                         >
                           +
                         </button>
@@ -504,7 +571,7 @@ export default function AdminPage() {
 
                 <div className="space-y-3">
                   {markets.map((market) => (
-                    <div key={market.id} className="bg-white/[0.02] border border-white/6 rounded-2xl p-4 space-y-3">
+                    <div key={market.id} className="bg-white/2 border border-white/6 rounded-2xl p-4 space-y-3">
                       <div className="flex justify-between items-start gap-3">
                         <div>
                           <span className="font-body-md font-bold text-white leading-tight">{market.title}</span>
@@ -538,7 +605,7 @@ export default function AdminPage() {
                                   ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
                                   : market.resolvedOutcomeId !== null
                                   ? 'opacity-30 border-white/5'
-                                  : 'bg-white/[0.04] hover:bg-white/[0.1] border-white/10 text-on-surface'
+                                  : 'bg-white/[0.04] hover:bg-white/10 border-white/10 text-on-surface'
                               }`}
                             >
                               {outcome.name} ({outcome.currentOdds.toFixed(2)})
@@ -554,6 +621,136 @@ export default function AdminPage() {
 
             {/* Right Column */}
             <div className="lg:col-span-4 space-y-6">
+
+              {/* Logo Management */}
+              <section className="glass-panel rounded-2xl p-6 space-y-4 border border-white/8">
+                <h2 className={sectionHead}>
+                  <span className="material-symbols-outlined text-[18px] text-primary">flag</span>
+                  LOGOS &amp; DRAPEAUX
+                </h2>
+
+                {/* Logos du match actif */}
+                {hasActiveMatch && (
+                  <div className="flex gap-3">
+                    {[{ team: match.homeTeam }, { team: match.awayTeam }].map(({ team }) => (
+                      <button
+                        key={team}
+                        onClick={() => { setLogoFormTeam(team); setLogoFormUrl(logoForTeam(team, teamLogos) ?? ''); }}
+                        className="flex-1 flex items-center gap-2 bg-white/3 hover:bg-white/[0.07] border border-white/8 rounded-xl p-2.5 transition-all cursor-pointer"
+                        title={`Modifier logo de ${team}`}
+                      >
+                        <div className="w-10 h-7 rounded overflow-hidden shrink-0 bg-white/4 border border-white/10">
+                          <TeamFlag team={team} logoUrl={logoForTeam(team, teamLogos)} className="w-full h-full object-cover" fallbackClassName="text-xl leading-7 block text-center" />
+                        </div>
+                        <span className="font-label-caps text-[10px] text-on-surface-variant truncate">{team}</span>
+                        <span className="material-symbols-outlined text-[14px] text-primary ml-auto shrink-0">edit</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Formulaire d'ajout/modification */}
+                <form onSubmit={saveLogoOverride} className="space-y-2.5">
+                  <input
+                    type="text"
+                    value={logoFormTeam}
+                    onChange={(e) => setLogoFormTeam(e.target.value)}
+                    placeholder="Nom de l'équipe (ex: PSG, Bosnie)"
+                    className={inputClass}
+                  />
+                  <input
+                    type="url"
+                    value={logoFormUrl}
+                    onChange={(e) => setLogoFormUrl(e.target.value)}
+                    placeholder="URL du logo (https://...)"
+                    className={inputClass}
+                  />
+                  {logoFormUrl && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-12 h-8 rounded overflow-hidden bg-white/4 border border-white/10 shrink-0">
+                        <img src={logoFormUrl} alt="preview" className="w-full h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.2'; }} />
+                      </div>
+                      <span className="text-[10px] text-on-surface-variant">Aperçu</span>
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={logoSaving || !logoFormTeam.trim() || !logoFormUrl.trim()}
+                    className="w-full bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary font-label-caps text-[10px] py-2.5 rounded-xl cursor-pointer disabled:opacity-40 transition-all"
+                  >
+                    {logoSaving ? 'Enregistrement…' : 'Enregistrer le logo'}
+                  </button>
+                </form>
+
+                {/* Recherche TheSportsDB (clubs) */}
+                <div className="space-y-2">
+                  <span className="block font-label-caps text-[9px] text-on-surface-variant tracking-widest">RECHERCHE LOGO CLUB (THESPORTSDB)</span>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={logoSearchQ}
+                      onChange={(e) => setLogoSearchQ(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), searchSportsDB())}
+                      placeholder="Ex: Arsenal, PSG, Bayern…"
+                      className={inputClass}
+                    />
+                    <button
+                      onClick={searchSportsDB}
+                      disabled={logoSearching || !logoSearchQ.trim()}
+                      className="bg-white/6 hover:bg-white/10 border border-white/10 px-3.5 rounded-xl font-label-caps text-[10px] cursor-pointer disabled:opacity-40 shrink-0"
+                    >
+                      {logoSearching ? '…' : <span className="material-symbols-outlined text-[16px]">search</span>}
+                    </button>
+                  </div>
+                  {logoSearchResults.length > 0 && (
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                      {logoSearchResults.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => { setLogoFormTeam(t.name); setLogoFormUrl(t.badge ?? ''); }}
+                          className="w-full flex items-center gap-3 bg-white/3 hover:bg-white/[0.07] border border-white/8 rounded-xl p-2 cursor-pointer transition-all text-left"
+                        >
+                          {t.badge && (
+                            <div className="w-8 h-8 rounded overflow-hidden shrink-0 bg-white/4">
+                              <img src={t.badge} alt={t.name} className="w-full h-full object-contain" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="block font-body-md text-white text-[12px] truncate">{t.name}</span>
+                            <span className="block text-[10px] text-on-surface-variant truncate">{[t.league, t.country].filter(Boolean).join(' · ')}</span>
+                          </div>
+                          <span className="material-symbols-outlined text-[14px] text-primary ml-auto shrink-0">add</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Logos enregistrés */}
+                {Object.keys(teamLogos).length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="block font-label-caps text-[9px] text-on-surface-variant tracking-widest">LOGOS ENREGISTRÉS</span>
+                    <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                      {Object.entries(teamLogos).map(([team, url]) => (
+                        <div key={team} className="flex items-center gap-2 bg-white/2 border border-white/6 rounded-xl p-2">
+                          <div className="w-8 h-6 rounded overflow-hidden shrink-0 bg-white/4">
+                            <img src={url} alt={team} className="w-full h-full object-contain" />
+                          </div>
+                          <span className="flex-1 font-label-caps text-[10px] text-on-surface-variant truncate">{team}</span>
+                          <button
+                            onClick={() => { setLogoFormTeam(team); setLogoFormUrl(url); }}
+                            className="material-symbols-outlined text-[14px] text-primary cursor-pointer hover:text-white transition-colors"
+                          >edit</button>
+                          <button
+                            onClick={() => deleteLogoOverride(team)}
+                            className="material-symbols-outlined text-[14px] text-error cursor-pointer hover:text-white transition-colors"
+                          >delete</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
 
               {/* Flash bet */}
               <section className="glass-panel rounded-2xl p-6 space-y-4 border border-white/8">
@@ -576,11 +773,11 @@ export default function AdminPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-white/[0.03] p-3 rounded-xl border border-white/8 text-center">
+                    <div className="bg-white/3 p-3 rounded-xl border border-white/8 text-center">
                       <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider">COTE OUI</span>
                       <span className="font-data-mono text-white text-sm font-bold tabular">2.50</span>
                     </div>
-                    <div className="bg-white/[0.03] p-3 rounded-xl border border-white/8 text-center">
+                    <div className="bg-white/3 p-3 rounded-xl border border-white/8 text-center">
                       <span className="block font-label-caps text-[9px] text-on-surface-variant mb-1 tracking-wider">COTE NON</span>
                       <span className="font-data-mono text-white text-sm font-bold tabular">1.40</span>
                     </div>
@@ -644,7 +841,7 @@ export default function AdminPage() {
                   <input type="text" value={rewardTitle} onChange={(e) => setRewardTitle(e.target.value)} placeholder="Titre du lot" className={inputClass} />
                   <input type="text" value={rewardDesc} onChange={(e) => setRewardDesc(e.target.value)} placeholder="Description" className={inputClass} />
                   <input type="number" value={rewardCost} onChange={(e) => setRewardCost(Number(e.target.value))} placeholder="Coût (TC)" className={`${inputClass} font-data-mono`} />
-                  <button type="submit" disabled={!rewardTitle.trim()} className="w-full bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 font-label-caps text-label-caps py-3 rounded-xl cursor-pointer disabled:opacity-40 transition-all">
+                  <button type="submit" disabled={!rewardTitle.trim()} className="w-full bg-white/6 hover:bg-white/10 border border-white/10 font-label-caps text-label-caps py-3 rounded-xl cursor-pointer disabled:opacity-40 transition-all">
                     Ajouter
                   </button>
                 </form>
@@ -660,7 +857,7 @@ export default function AdminPage() {
                 <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                   {rewardLedger.length > 0 ? (
                     rewardLedger.map((led) => (
-                      <div key={led.id} className="bg-white/[0.03] p-2.5 rounded-xl border border-white/8 flex justify-between items-center text-[12px] font-data-mono">
+                      <div key={led.id} className="bg-white/3 p-2.5 rounded-xl border border-white/8 flex justify-between items-center text-[12px] font-data-mono">
                         <div>
                           <span className="block text-white font-bold">{led.username}</span>
                           <span className="block text-[10px] text-on-surface-variant">{led.rewardTitle}</span>

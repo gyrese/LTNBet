@@ -180,6 +180,10 @@ interface GameStore {
   doubleGainsActive: boolean;
   toggleDoubleGains: (active: boolean) => void;
 
+  // Logos/drapeaux personnalisés des équipes (nom → URL), gérés depuis l'admin.
+  teamLogos: Record<string, string>;
+  fetchTeamLogos: () => Promise<void>;
+
   runSimulationStep: () => void;
   _subscribeRealtime: () => void;
 }
@@ -409,6 +413,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   rewardLedger: lsGet<RewardLedger[]>('ltn_reward_ledger', []),
   activeEvent: null,
   doubleGainsActive: false,
+  teamLogos: {},
 
   // ── Init: load from SQLite via API ─────────────────────────────────────────
 
@@ -422,6 +427,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (settings) set({ doubleGainsActive: Boolean(settings.double_gains_active) });
       if (rewards) set({ rewards });
       if (rewardLedger) set({ rewardLedger });
+      get().fetchTeamLogos();
 
       const userId = lsGet<Player | null>('ltn_user_profile', null)?.id;
       if (userId) {
@@ -510,6 +516,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Les paris locaux référencent l'ancien match (supprimé/remplacé) → on les purge pour éviter
       // des paris « fantômes » dans le profil (AV-6).
       lsSet('ltn_user_bets', []);
+      // Nouveau match = nouvelles équipes → recharger les logos custom éventuels.
+      get().fetchTeamLogos();
       if (match) {
         set({
           match: matchFromDb(match),
@@ -760,18 +768,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       get().triggerGameEvent({ type: 'leader_change', title: 'CHANGEMENT DE LEADER ! 👑', subtitle: `${newLeader.username} prend la 1ère place !` });
     }
 
-    if (currentUser && newLeader?.id === currentUser.id) {
-      const hasWonBet = get().myBets.some(b => b.status === 'won');
-      if (hasWonBet) {
-        const myBadges = get().myBadges;
-        if (!myBadges.includes('legende')) {
-          const updated = [...myBadges, 'legende'];
-          lsSet('ltn_user_badges', updated);
-          set({ myBadges: updated });
-          get().triggerGameEvent({ type: 'badge', title: 'NOUVEAU BADGE ! 🏅', subtitle: `${currentUser.username} débloque "Légende des Toiles" !` });
-        }
-      }
-    }
+    // NB : le badge « Légende des Toiles » (top 1) est attribué CÔTÉ SERVEUR à la résolution
+    // (db.awardLegendeBadge) et diffusé via SSE. On ne l'écrit plus en local : cela créait une
+    // divergence (le badge disparaissait au rechargement car le serveur l'ignorait).
 
     if (currentUser) {
       const userInList = all.find(p => p.id === currentUser.id);
@@ -859,6 +858,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ doubleGainsActive: active });
     dbPost({ op: 'toggle_double_gains', active });
     if (active) get().triggerGameEvent({ type: 'double_gains', title: '🔥 DOUBLE GAINS ACTIFS ! 🔥', subtitle: 'Toutes les cotes sont doublées !' });
+  },
+
+  // ── Team logos ─────────────────────────────────────────────────────────────
+
+  fetchTeamLogos: async () => {
+    try {
+      const r = await fetch('/api/team-logos');
+      if (r.ok) set({ teamLogos: await r.json() });
+    } catch { /* ignore : on retombe sur les drapeaux par défaut */ }
   },
 
   // ── Simulation ─────────────────────────────────────────────────────────────

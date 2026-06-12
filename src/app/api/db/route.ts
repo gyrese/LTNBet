@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import db, { suspendImpossibleOutcomes, awardEarnedBadges, progressExactScoreMission, syncMatchWallet, isValidPin, hashRecoveryCode } from '@/lib/db';
+import db, { suspendImpossibleOutcomes, awardEarnedBadges, progressExactScoreMission, syncMatchWallet, isValidPin, hashRecoveryCode, awardLegendeBadge } from '@/lib/db';
 import { broadcast, publicJSON } from '@/lib/sse-bus';
 import { calculateDynamicOdds } from '@/lib/odds';
 import { triggerWebhooks } from '@/lib/webhooks';
@@ -304,6 +304,12 @@ export async function POST(req: NextRequest) {
   if (op === 'place_bet') {
     const { userId, marketId, outcomeId, amount } = body;
 
+    // Garde-fou montant : entier strictement positif. Sans ce contrôle, un POST direct avec un
+    // montant négatif passait le test « solde < montant » et CRÉDITAIT le joueur (toiles - (-x)).
+    if (!Number.isInteger(amount) || amount <= 0) {
+      return json({ success: false, error: 'Montant de mise invalide.' });
+    }
+
     // Verrou de session : pas de pari si aucun match actif, match terminé ou session clôturée.
     const activeMatch = getActiveMatchRow();
     if (!activeMatch) return json({ success: false, error: 'Aucun match en cours.' });
@@ -325,9 +331,15 @@ export async function POST(req: NextRequest) {
     // Garde-fou serveur : une issue suspendue (cote ramenée à 0 par suspendImpossibleOutcomes) est refusée.
     if (Number(outcome.current_odds) <= 1) return json({ success: false, error: 'Cote indisponible (issue suspendue).' });
 
+    // Double Gains figé à l'instant du pari : le payout ne doit dépendre QUE de l'état actif
+    // au moment de miser, pas de l'état au moment de la résolution (sinon activer Double Gains
+    // juste avant de résoudre paierait ×2 des paris placés en mode normal).
+    const betSettings = db.prepare('SELECT double_gains_active FROM game_settings WHERE match_id = ?').get(activeMatch.id) as { double_gains_active: number } | undefined;
+    const doubleAtBet = betSettings?.double_gains_active === 1 ? 1 : 0;
+
     const betId = 'bet-' + crypto.randomUUID().slice(0, 8);
-    db.prepare(`INSERT INTO bets (id,user_id,match_id,market_id,market_title,outcome_id,outcome_name,amount,odds_at_bet,status,payout) VALUES (?,?,?,?,?,?,?,?,?,'pending',0)`)
-      .run(betId, userId, getActiveMatchId(), marketId, market.title, outcomeId, outcome.name, amount, outcome.current_odds);
+    db.prepare(`INSERT INTO bets (id,user_id,match_id,market_id,market_title,outcome_id,outcome_name,amount,odds_at_bet,status,payout,double_at_bet) VALUES (?,?,?,?,?,?,?,?,?,'pending',0,?)`)
+      .run(betId, userId, getActiveMatchId(), marketId, market.title, outcomeId, outcome.name, amount, outcome.current_odds, doubleAtBet);
 
     db.prepare('UPDATE players SET toiles_coins = toiles_coins - ?, total_bets = total_bets + 1 WHERE id = ?').run(amount, userId);
     db.prepare('UPDATE outcomes SET total_bet_amount = total_bet_amount + ?, total_bets_count = total_bets_count + 1 WHERE id = ?').run(amount, outcomeId);
@@ -348,15 +360,20 @@ export async function POST(req: NextRequest) {
   // ── Resolve market ──
   if (op === 'resolve_market') {
     const { marketId, outcomeId } = body;
+
+    // Garde anti double-résolution : un marché déjà résolu (resolved_outcome_id) a déjà payé
+    // ses gagnants. Re-résoudre est un no-op (évite tout re-paiement / écrasement d'issue).
+    const existing = db.prepare('SELECT resolved_outcome_id FROM markets WHERE id = ?').get(marketId) as { resolved_outcome_id: string | null } | undefined;
+    if (existing?.resolved_outcome_id) return json({ success: true, alreadyResolved: true });
+
     db.prepare('UPDATE markets SET is_closed = 1, resolved_outcome_id = ? WHERE id = ?').run(outcomeId, marketId);
 
     const pendingBets = db.prepare(`SELECT * FROM bets WHERE market_id = ? AND status = 'pending'`).all(marketId) as Record<string, unknown>[];
-    const settings = db.prepare('SELECT * FROM game_settings WHERE match_id = ?').get(getActiveMatchId()) as { double_gains_active: number } | undefined;
-    const doubleGains = settings?.double_gains_active === 1;
 
     for (const bet of pendingBets) {
       if (bet.outcome_id === outcomeId) {
-        const mult = doubleGains ? (bet.odds_at_bet as number) * 2 : (bet.odds_at_bet as number);
+        // Double Gains figé par pari (double_at_bet), pas l'état global au moment de résoudre.
+        const mult = bet.double_at_bet === 1 ? (bet.odds_at_bet as number) * 2 : (bet.odds_at_bet as number);
         const payout = Math.round((bet.amount as number) * mult);
         db.prepare(`UPDATE bets SET status = 'won', payout = ? WHERE id = ?`).run(payout, bet.id);
         db.prepare('UPDATE players SET toiles_coins = toiles_coins + ?, total_winnings = total_winnings + ?, successful_bets = successful_bets + 1 WHERE id = ?').run(payout, payout, bet.user_id);
@@ -405,6 +422,17 @@ export async function POST(req: NextRequest) {
       const change = newRank < oldRank ? 'up' : newRank > oldRank ? 'down' : 'same';
       updRank.run(newRank, change, p.id);
     });
+
+    // Badge « Légende des Toiles » : le nouveau leader (réel, avec un pari gagné) le décroche.
+    const legende = awardLegendeBadge();
+    if (legende) {
+      const subtitle = `${legende.username} débloque « Légende des Toiles » !`;
+      db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'badge', ?, ?)`)
+        .run(`ge-badge-${legende.userId}-legende-${Date.now()}`, getActiveMatchId(), 'NOUVEAU BADGE ! 🏅', subtitle);
+      broadcast('game_event', { type: 'badge', title: 'NOUVEAU BADGE ! 🏅', subtitle });
+      broadcast('player_update', db.prepare('SELECT * FROM players WHERE id = ?').get(legende.userId));
+    }
+
     const updatedLeaderboard = getActiveLeaderboardPlayers(getActiveMatchId());
     broadcast('leaderboard_update', updatedLeaderboard);
 

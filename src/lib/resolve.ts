@@ -9,21 +9,25 @@
  * « Vedette » a marqué) → toujours à régler à la main dans le panneau de résolution.
  */
 
-import db, { awardEarnedBadges, progressExactScoreMission } from './db';
+import db, { awardEarnedBadges, progressExactScoreMission, awardLegendeBadge } from './db';
 import { broadcast } from './sse-bus';
 import { getActiveLeaderboardPlayers } from './presence';
 
 /** Résout un marché : paie les gagnants, marque les perdants, attribue badges, diffuse. */
 export function resolveMarket(matchId: string, marketId: string, outcomeId: string) {
+  // Garde anti double-résolution : un marché déjà résolu a déjà payé ses gagnants. Sans cette
+  // garde, une double bascule de statut (live→finished→live→finished) re-paierait les paris.
+  const existing = db.prepare('SELECT resolved_outcome_id FROM markets WHERE id = ?').get(marketId) as { resolved_outcome_id: string | null } | undefined;
+  if (existing?.resolved_outcome_id) return;
+
   db.prepare('UPDATE markets SET is_closed = 1, resolved_outcome_id = ? WHERE id = ?').run(outcomeId, marketId);
 
   const pendingBets = db.prepare(`SELECT * FROM bets WHERE market_id = ? AND status = 'pending'`).all(marketId) as Record<string, unknown>[];
-  const settings = db.prepare('SELECT * FROM game_settings WHERE match_id = ?').get(matchId) as { double_gains_active: number } | undefined;
-  const doubleGains = settings?.double_gains_active === 1;
 
   for (const bet of pendingBets) {
     if (bet.outcome_id === outcomeId) {
-      const mult = doubleGains ? (bet.odds_at_bet as number) * 2 : (bet.odds_at_bet as number);
+      // Double Gains figé par pari (double_at_bet), pas l'état global au moment de résoudre.
+      const mult = bet.double_at_bet === 1 ? (bet.odds_at_bet as number) * 2 : (bet.odds_at_bet as number);
       const payout = Math.round((bet.amount as number) * mult);
       db.prepare(`UPDATE bets SET status = 'won', payout = ? WHERE id = ?`).run(payout, bet.id);
       db.prepare('UPDATE players SET toiles_coins = toiles_coins + ?, total_winnings = total_winnings + ?, successful_bets = successful_bets + 1 WHERE id = ?').run(payout, payout, bet.user_id);
@@ -70,6 +74,17 @@ export function resolveMarket(matchId: string, marketId: string, outcomeId: stri
     const change = newRank < oldRank ? 'up' : newRank > oldRank ? 'down' : 'same';
     updRank.run(newRank, change, p.id);
   });
+
+  // Badge « Légende des Toiles » : le nouveau leader (réel, avec un pari gagné) le décroche.
+  const legende = awardLegendeBadge();
+  if (legende) {
+    const subtitle = `${legende.username} débloque « Légende des Toiles » !`;
+    db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'badge', ?, ?)`)
+      .run(`ge-badge-${legende.userId}-legende-${Date.now()}`, matchId, 'NOUVEAU BADGE ! 🏅', subtitle);
+    broadcast('game_event', { type: 'badge', title: 'NOUVEAU BADGE ! 🏅', subtitle });
+    broadcast('player_update', db.prepare('SELECT * FROM players WHERE id = ?').get(legende.userId));
+  }
+
   broadcast('leaderboard_update', getActiveLeaderboardPlayers(matchId));
 }
 

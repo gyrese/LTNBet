@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, Market, Outcome } from '@/lib/store';
+import { logoForTeam } from '@/lib/flags';
 import TeamFlag from '@/components/TeamFlag';
 import Navigation from '@/components/Navigation';
 import GameEventOverlay from '@/components/GameEventOverlay';
@@ -17,6 +18,7 @@ export default function HomePage() {
     markets,
     placeBet,
     doubleGainsActive,
+    teamLogos,
   } = useGameStore();
 
   const matchFinished = match.status === 'finished';
@@ -200,7 +202,7 @@ export default function HomePage() {
                     boxShadow: '0 8px 24px -8px rgba(255,80,0,0.25)',
                   }}
                 >
-                  <TeamFlag team={match.homeTeam} className="w-full h-full object-cover" fallbackClassName="relative" />
+                  <TeamFlag team={match.homeTeam} logoUrl={logoForTeam(match.homeTeam, teamLogos)} className="w-full h-full object-cover" fallbackClassName="relative" />
                 </div>
                 <span
                   className="font-body-md text-[16px] md:text-[20px] font-bold text-center leading-tight"
@@ -233,7 +235,7 @@ export default function HomePage() {
                     boxShadow: '0 8px 24px -8px rgba(26,143,255,0.25)',
                   }}
                 >
-                  <TeamFlag team={match.awayTeam} className="w-full h-full object-cover" fallbackClassName="relative" />
+                  <TeamFlag team={match.awayTeam} logoUrl={logoForTeam(match.awayTeam, teamLogos)} className="w-full h-full object-cover" fallbackClassName="relative" />
                 </div>
                 <span
                   className="font-body-md text-[16px] md:text-[20px] font-bold text-center leading-tight"
@@ -863,7 +865,7 @@ function BetSlipBody({
         <input
           type="range"
           min={10}
-          max={Math.max(10, Math.min(maxCoins, 500))}
+          max={Math.max(10, maxCoins)}
           step={10}
           value={betAmount}
           onChange={(e) => setBetAmount(Number(e.target.value))}
@@ -876,7 +878,7 @@ function BetSlipBody({
               key={amt}
               onClick={() => setBetAmount(Math.min(maxCoins, amt))}
               disabled={maxCoins < amt}
-              className="flex-1 py-1.5 rounded-lg font-data-mono text-[11px] text-center transition-all cursor-pointer tabular"
+              className="flex-1 py-1.5 rounded-lg font-data-mono text-[11px] text-center transition-all cursor-pointer tabular disabled:opacity-30 disabled:cursor-not-allowed"
               style={
                 betAmount === amt
                   ? {
@@ -894,6 +896,27 @@ function BetSlipBody({
               {amt}
             </button>
           ))}
+          {/* MAX : mise tout le solde (utile en fin de soirée avec un gros portefeuille). */}
+          <button
+            onClick={() => setBetAmount(Math.max(10, maxCoins))}
+            disabled={maxCoins < 10}
+            className="flex-1 py-1.5 rounded-lg font-data-mono text-[11px] text-center transition-all cursor-pointer tabular disabled:opacity-30 disabled:cursor-not-allowed"
+            style={
+              betAmount === maxCoins
+                ? {
+                    background: 'rgba(255,184,0,0.18)',
+                    border: '1px solid rgba(255,184,0,0.45)',
+                    color: '#FFB800',
+                  }
+                : {
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: 'rgba(255,200,120,0.6)',
+                  }
+            }
+          >
+            MAX
+          </button>
         </div>
       </div>
 

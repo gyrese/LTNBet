@@ -159,6 +159,12 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES players(id) ON DELETE CASCADE,
     FOREIGN KEY (reward_id) REFERENCES rewards(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS team_logos (
+    team TEXT PRIMARY KEY,
+    logo_url TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // Alter table migrations to add columns on existing DB databases safely
@@ -187,6 +193,10 @@ try { db.exec('ALTER TABLE matches ADD COLUMN fd_match_id TEXT;'); } catch { /* 
 
 // Provenance de la cote de chaque outcome : 'api' | 'default' | 'manual' (badge admin).
 try { db.exec("ALTER TABLE outcomes ADD COLUMN odds_source TEXT DEFAULT 'default';"); } catch { /* exists */ }
+
+// Double Gains figé sur le pari (1 = doubler le payout à la résolution). Évite que l'activation
+// tardive du mode double paie ×2 des paris placés en mode normal.
+try { db.exec('ALTER TABLE bets ADD COLUMN double_at_bet INTEGER DEFAULT 0;'); } catch { /* exists */ }
 
 // Présence : dernière activité d'un joueur (heartbeat) pour le comptage des connectés et le timeout.
 try { db.exec('ALTER TABLE players ADD COLUMN last_seen TEXT;'); } catch { /* exists */ }
@@ -420,6 +430,34 @@ export function awardEarnedBadges(userId: string): string[] {
   if (best >= 5) give('nostradamus');
 
   return newly;
+}
+
+/**
+ * Attribue le badge « Légende des Toiles » (top 1 du classement) au joueur RÉEL en tête.
+ * Règles (alignées sur l'ancienne logique client) :
+ *   - on regarde le leader global par toiles_coins (bots inclus) ; si c'est un bot → personne ;
+ *   - le leader doit avoir au moins un pari GAGNÉ (anti-triche) ;
+ *   - idempotent (INSERT OR IGNORE + contrôle de possession préalable).
+ * @returns { userId, username } si le badge vient d'être débloqué, sinon null.
+ */
+export function awardLegendeBadge(): { userId: string; username: string } | null {
+  const leader = db
+    .prepare('SELECT id, username, is_bot FROM players ORDER BY toiles_coins DESC LIMIT 1')
+    .get() as { id: string; username: string; is_bot: number } | undefined;
+  if (!leader || leader.is_bot) return null;
+
+  const owned = db
+    .prepare("SELECT 1 FROM player_badges WHERE player_id = ? AND badge_code = 'legende'")
+    .get(leader.id);
+  if (owned) return null;
+
+  const won = db
+    .prepare("SELECT COUNT(*) AS c FROM bets WHERE user_id = ? AND status = 'won'")
+    .get(leader.id) as { c: number };
+  if (won.c === 0) return null;
+
+  db.prepare("INSERT OR IGNORE INTO player_badges (player_id, badge_code) VALUES (?, 'legende')").run(leader.id);
+  return { userId: leader.id, username: leader.username };
 }
 
 /**

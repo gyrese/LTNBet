@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useGameStore } from '@/lib/store';
 import QRCode from 'qrcode';
 import { getAvatarConfig } from '@/lib/avatars';
+import { logoForTeam } from '@/lib/flags';
 import TeamFlag from '@/components/TeamFlag';
 import GameEventOverlay from '@/components/GameEventOverlay';
 
@@ -103,7 +104,7 @@ function Avatar({ player, size = 32 }: { player: { avatar: string; username: str
 }
 
 export default function BroadcastScreen() {
-  const { match, leaderboard } = useGameStore();
+  const { match, leaderboard, teamLogos } = useGameStore();
   const [qrUrl, setQrUrl] = useState('');
   const [tickerEvents, setTickerEvents] = useState<{ id: string; type: string; title: string; subtitle: string }[]>([]);
   const [secs, setSecs] = useState(0);
@@ -400,7 +401,7 @@ export default function BroadcastScreen() {
                   fontSize: 52,
                 }}
               >
-                <TeamFlag team={match.homeTeam} className="w-full h-full object-cover" />
+                <TeamFlag team={match.homeTeam} logoUrl={logoForTeam(match.homeTeam, teamLogos)} className="w-full h-full object-cover" />
               </div>
               <span style={{
                 fontFamily: 'var(--font-anybody)', fontSize: 20, fontWeight: 800, textTransform: 'uppercase',
@@ -445,7 +446,7 @@ export default function BroadcastScreen() {
                   fontSize: 52,
                 }}
               >
-                <TeamFlag team={match.awayTeam} className="w-full h-full object-cover" />
+                <TeamFlag team={match.awayTeam} logoUrl={logoForTeam(match.awayTeam, teamLogos)} className="w-full h-full object-cover" />
               </div>
               <span style={{
                 fontFamily: 'var(--font-anybody)', fontSize: 20, fontWeight: 800, textTransform: 'uppercase',

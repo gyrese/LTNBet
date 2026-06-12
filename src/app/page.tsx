@@ -53,6 +53,13 @@ export default function HomePage() {
     if (mounted && !currentUser) router.push('/join');
   }, [currentUser, router, mounted]);
 
+  // Quand on se connecte (currentUser défini) et qu'un match est actif, on affiche le haut de la page
+  useEffect(() => {
+    if (mounted && currentUser && hasActiveMatch) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [currentUser, hasActiveMatch, mounted]);
+
   if (!mounted || !currentUser) return null;
 
   /* ── Écran d'attente ── */

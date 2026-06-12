@@ -28,8 +28,26 @@ export default function HomePage() {
   const [betStatusMsg, setBetStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [goals, setGoals] = useState<{ id: string; type: string; title: string; subtitle: string; meta?: string }[]>([]);
+  const [showStats, setShowStats] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    if (!hasActiveMatch) return;
+    const fetchGoals = async () => {
+      try {
+        const res = await fetch('/api/db?op=ticker').then((r) => r.json());
+        if (res.events) {
+          const goalEvents = res.events.filter((e: any) => e.type === 'goal');
+          setGoals(goalEvents);
+        }
+      } catch (err) {
+        console.error('Error fetching goals:', err);
+      }
+    };
+    fetchGoals();
+  }, [hasActiveMatch, match.homeScore, match.awayScore]);
 
   useEffect(() => {
     if (mounted && !currentUser) router.push('/join');
@@ -219,6 +237,54 @@ export default function HomePage() {
               </div>
             </div>
 
+            {/* Scorers list */}
+            {goals.length > 0 && (
+              <div className="w-full max-w-md mx-auto mt-4 grid grid-cols-2 gap-4 text-xs font-data-mono text-on-surface-variant/80 border-t border-white/5 pt-3">
+                {/* Home scorers */}
+                <div className="text-right space-y-1 pr-2 border-r border-white/5">
+                  {goals
+                    .filter((g) => {
+                      try {
+                        const meta = g.meta ? (typeof g.meta === 'string' ? JSON.parse(g.meta) : g.meta) : null;
+                        return meta?.team === 'home';
+                      } catch {
+                        return false;
+                      }
+                    })
+                    .map((g) => {
+                      const meta = g.meta ? (typeof g.meta === 'string' ? JSON.parse(g.meta) : g.meta) : null;
+                      return (
+                        <div key={g.id} className="flex items-center justify-end gap-1.5">
+                          <span className="material-symbols-outlined text-[13px]" style={{ color: '#FF6B20' }}>sports_soccer</span>
+                          <span>{meta?.scorer || 'Buteur'}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+                {/* Away scorers */}
+                <div className="text-left space-y-1 pl-2">
+                  {goals
+                    .filter((g) => {
+                      try {
+                        const meta = g.meta ? (typeof g.meta === 'string' ? JSON.parse(g.meta) : g.meta) : null;
+                        return meta?.team === 'away';
+                      } catch {
+                        return false;
+                      }
+                    })
+                    .map((g) => {
+                      const meta = g.meta ? (typeof g.meta === 'string' ? JSON.parse(g.meta) : g.meta) : null;
+                      return (
+                        <div key={g.id} className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[13px]" style={{ color: '#4DA8FF' }}>sports_soccer</span>
+                          <span>{meta?.scorer || 'Buteur'}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
             {/* Match progress bar */}
             {(match.status === 'live' || match.status === 'half_time') && (
               <div className="w-full max-w-md mx-auto mt-7">
@@ -245,6 +311,133 @@ export default function HomePage() {
                 </div>
               </div>
             )}
+
+            {/* Collapsible stats */}
+            <div className="w-full max-w-md mx-auto mt-4 text-center">
+              <button
+                onClick={() => setShowStats(!showStats)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/[0.03] border border-white/5 hover:bg-white/[0.06] transition-all text-[11px] font-label-caps text-on-surface-variant/80 cursor-pointer focus:outline-none"
+              >
+                <span className="material-symbols-outlined text-[16px] transition-transform duration-200" style={{ transform: showStats ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                  keyboard_arrow_down
+                </span>
+                {showStats ? 'Masquer les stats' : 'Statistiques du match'}
+              </button>
+
+              <AnimatePresence initial={false}>
+                {showStats && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeInOut' }}
+                    className="w-full text-left overflow-hidden mt-4 space-y-4 border-t border-white/5 pt-4"
+                  >
+                    {/* Possession */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-[11px] font-data-mono text-on-surface-variant/80">
+                        <span className="font-bold" style={{ color: '#FF6B20' }}>{match.possessionHome}%</span>
+                        <span className="font-label-caps text-[9px] tracking-wider">Possession</span>
+                        <span className="font-bold" style={{ color: '#4DA8FF' }}>{100 - match.possessionHome}%</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full overflow-hidden flex bg-white/[0.04]">
+                        <div style={{ width: `${match.possessionHome}%`, backgroundColor: '#FF6B20' }} className="h-full rounded-l-full" />
+                        <div style={{ width: `${100 - match.possessionHome}%`, backgroundColor: '#4DA8FF' }} className="h-full rounded-r-full" />
+                      </div>
+                    </div>
+
+                    {/* Tirs / Cadrés */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-[11px] font-data-mono text-on-surface-variant/80">
+                        <span className="font-bold" style={{ color: '#FF6B20' }}>{match.shotsHome} ({match.shotsOnTargetHome})</span>
+                        <span className="font-label-caps text-[9px] tracking-wider">Tirs (Cadrés)</span>
+                        <span className="font-bold" style={{ color: '#4DA8FF' }}>{match.shotsAway} ({match.shotsOnTargetAway})</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full overflow-hidden flex bg-white/[0.04]">
+                        <div
+                          style={{ width: `${(match.shotsHome / ((match.shotsHome + match.shotsAway) || 1)) * 100}%`, backgroundColor: '#FF6B20' }}
+                          className="h-full rounded-l-full"
+                        />
+                        <div
+                          style={{ width: `${(match.shotsAway / ((match.shotsHome + match.shotsAway) || 1)) * 100}%`, backgroundColor: '#4DA8FF' }}
+                          className="h-full rounded-r-full"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Corners */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-[11px] font-data-mono text-on-surface-variant/80">
+                        <span className="font-bold" style={{ color: '#FF6B20' }}>{match.cornersHome}</span>
+                        <span className="font-label-caps text-[9px] tracking-wider">Corners</span>
+                        <span className="font-bold" style={{ color: '#4DA8FF' }}>{match.cornersAway}</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full overflow-hidden flex bg-white/[0.04]">
+                        <div
+                          style={{ width: `${(match.cornersHome / ((match.cornersHome + match.cornersAway) || 1)) * 100}%`, backgroundColor: '#FF6B20' }}
+                          className="h-full rounded-l-full"
+                        />
+                        <div
+                          style={{ width: `${(match.cornersAway / ((match.cornersHome + match.cornersAway) || 1)) * 100}%`, backgroundColor: '#4DA8FF' }}
+                          className="h-full rounded-r-full"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Fautes */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-[11px] font-data-mono text-on-surface-variant/80">
+                        <span className="font-bold" style={{ color: '#FF6B20' }}>{match.foulsHome}</span>
+                        <span className="font-label-caps text-[9px] tracking-wider">Fautes</span>
+                        <span className="font-bold" style={{ color: '#4DA8FF' }}>{match.foulsAway}</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full overflow-hidden flex bg-white/[0.04]">
+                        <div
+                          style={{ width: `${(match.foulsHome / ((match.foulsHome + match.foulsAway) || 1)) * 100}%`, backgroundColor: '#FF6B20' }}
+                          className="h-full rounded-l-full"
+                        />
+                        <div
+                          style={{ width: `${(match.foulsAway / ((match.foulsHome + match.foulsAway) || 1)) * 100}%`, backgroundColor: '#4DA8FF' }}
+                          className="h-full rounded-r-full"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Cartons */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-[11px] font-data-mono text-on-surface-variant/80">
+                        <span className="font-bold" style={{ color: '#FF6B20' }}>{match.cardsHome}</span>
+                        <span className="font-label-caps text-[9px] tracking-wider">Cartons</span>
+                        <span className="font-bold" style={{ color: '#4DA8FF' }}>{match.cardsAway}</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full overflow-hidden flex bg-white/[0.04]">
+                        <div
+                          style={{ width: `${(match.cardsHome / ((match.cardsHome + match.cardsAway) || 1)) * 100}%`, backgroundColor: '#FF6B20' }}
+                          className="h-full rounded-l-full"
+                        />
+                        <div
+                          style={{ width: `${(match.cardsAway / ((match.cardsHome + match.cardsAway) || 1)) * 100}%`, backgroundColor: '#4DA8FF' }}
+                          className="h-full rounded-r-full"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Précision passes */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-[11px] font-data-mono text-on-surface-variant/80">
+                        <span className="font-bold" style={{ color: '#FF6B20' }}>{match.passesAccuracyHome}%</span>
+                        <span className="font-label-caps text-[9px] tracking-wider">Précision Passes</span>
+                        <span className="font-bold" style={{ color: '#4DA8FF' }}>{match.passesAccuracyAway}%</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full overflow-hidden flex bg-white/[0.04]">
+                        <div style={{ width: `${match.passesAccuracyHome}%`, backgroundColor: '#FF6B20' }} className="h-full rounded-l-full" />
+                        <div style={{ width: `${match.passesAccuracyAway}%`, backgroundColor: '#4DA8FF' }} className="h-full rounded-r-full" />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </motion.section>
 

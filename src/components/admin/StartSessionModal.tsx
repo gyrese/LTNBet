@@ -18,8 +18,8 @@ interface MatchResult {
   leagueSlug: string;
 }
 type OddsSource = 'api' | 'default' | 'manual';
-interface BlueprintOutcome { id: string; name: string; baseOdds: number; oddsSource: OddsSource; disabled?: boolean }
-interface BlueprintMarket { id: string; type: string; title: string; outcomes: BlueprintOutcome[] }
+interface BlueprintOutcome { id: string; name: string; baseOdds: number; oddsSource: OddsSource }
+interface BlueprintMarket { id: string; type: string; title: string; outcomes: BlueprintOutcome[]; disabled?: boolean }
 
 interface Props {
   open: boolean;
@@ -177,17 +177,10 @@ export default function StartSessionModal({ open, onClose, onCreated }: Props) {
     );
   };
 
-  const toggleOutcome = (marketId: string, outcomeId: string) => {
+  const toggleMarket = (marketId: string) => {
     setMarkets((prev) =>
       prev.map((m) =>
-        m.id !== marketId
-          ? m
-          : {
-              ...m,
-              outcomes: m.outcomes.map((o) =>
-                o.id !== outcomeId ? o : { ...o, disabled: !o.disabled },
-              ),
-            },
+        m.id !== marketId ? m : { ...m, disabled: !m.disabled },
       ),
     );
   };
@@ -196,16 +189,11 @@ export default function StartSessionModal({ open, onClose, onCreated }: Props) {
   const launch = async () => {
     if (!selected) return;
 
-    // Filter active markets/outcomes
-    const activeMarkets = markets
-      .map((m) => ({
-        ...m,
-        outcomes: m.outcomes.filter((o) => !o.disabled),
-      }))
-      .filter((m) => m.outcomes.length > 0);
+    // Filter active markets
+    const activeMarkets = markets.filter((m) => !m.disabled);
 
     if (activeMarkets.length === 0) {
-      setError('Vous devez activer au moins une cote avant de lancer la session.');
+      setError('Vous devez activer au moins un marché de cotes avant de lancer la session.');
       return;
     }
 
@@ -432,52 +420,60 @@ export default function StartSessionModal({ open, onClose, onCreated }: Props) {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[42vh]">
-              {markets.map((mk) => (
-                <div key={mk.id} className="bg-white/[0.02] border border-white/6 rounded-2xl p-3.5">
-                  <span className="block font-label-caps text-[10px] text-on-surface tracking-wider mb-2.5">{mk.title}</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {mk.outcomes.map((o) => {
-                      const isDisabled = o.disabled === true;
-                      return (
+              {markets.map((mk) => {
+                const isMarketDisabled = mk.disabled === true;
+                return (
+                  <div
+                    key={mk.id}
+                    className={`border rounded-2xl p-3.5 transition-all ${
+                      isMarketDisabled
+                        ? 'bg-black/20 border-white/5 opacity-40 shadow-inner'
+                        : 'bg-white/[0.02] border-white/6 shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-2.5">
+                      <span className={`font-label-caps text-[10px] tracking-wider ${isMarketDisabled ? 'text-on-surface-variant/40 line-through' : 'text-on-surface'}`}>
+                        {mk.title}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleMarket(mk.id)}
+                        className="text-on-surface-variant/60 hover:text-white shrink-0 flex items-center justify-center transition-colors focus:outline-none cursor-pointer"
+                        title={isMarketDisabled ? 'Activer ce marché' : 'Désactiver ce marché'}
+                      >
+                        <span className={`material-symbols-outlined text-[24px] ${isMarketDisabled ? 'text-white/20' : 'text-emerald-400'}`}>
+                          {isMarketDisabled ? 'toggle_off' : 'toggle_on'}
+                        </span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {mk.outcomes.map((o) => (
                         <div
                           key={o.id}
-                          className={`flex items-center justify-between gap-2 border rounded-xl px-3 py-2 transition-all ${
-                            isDisabled
-                              ? 'bg-black/20 border-white/5 opacity-40'
-                              : 'bg-white/[0.02] border-white/8'
+                          className={`flex items-center justify-between gap-2 border border-white/8 rounded-xl px-3 py-2 bg-white/[0.02] ${
+                            isMarketDisabled ? 'opacity-30' : ''
                           }`}
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <button
-                              type="button"
-                              onClick={() => toggleOutcome(mk.id, o.id)}
-                              className="text-on-surface-variant/60 hover:text-white shrink-0 flex items-center justify-center transition-colors focus:outline-none"
-                              title={isDisabled ? 'Activer cette cote' : 'Désactiver cette cote'}
-                            >
-                              <span className={`material-symbols-outlined text-[22px] ${isDisabled ? 'text-white/20' : 'text-emerald-400'}`}>
-                                {isDisabled ? 'toggle_off' : 'toggle_on'}
-                              </span>
-                            </button>
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isDisabled ? 'bg-white/10' : o.oddsSource === 'api' ? 'bg-emerald-400' : o.oddsSource === 'manual' ? 'bg-tertiary' : 'bg-white/30'}`} />
-                            <span className={`text-[12px] truncate ${isDisabled ? 'text-on-surface-variant/40 line-through' : 'text-on-surface'}`}>{o.name}</span>
-                          </div>
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMarketDisabled ? 'bg-white/10' : o.oddsSource === 'api' ? 'bg-emerald-400' : o.oddsSource === 'manual' ? 'bg-tertiary' : 'bg-white/30'}`} />
+                            <span className={`text-[12px] truncate ${isMarketDisabled ? 'text-on-surface-variant/40' : 'text-on-surface'}`}>{o.name}</span>
+                          </span>
                           <input
                             type="number"
                             step="0.05"
                             min="1.01"
                             value={o.baseOdds}
-                            disabled={isDisabled}
+                            disabled={isMarketDisabled}
                             onChange={(e) => updateOdds(mk.id, o.id, e.target.value)}
-                            className={`w-20 shrink-0 bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-[13px] font-data-mono text-center focus:outline-none focus:ring-2 focus:ring-primary/40 tabular ${
-                              isDisabled ? 'opacity-30 cursor-not-allowed' : 'text-white'
-                            }`}
+                            className="w-20 shrink-0 bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-white text-[13px] font-data-mono text-center focus:outline-none focus:ring-2 focus:ring-primary/40 tabular disabled:cursor-not-allowed"
                           />
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="flex justify-between gap-2 border-t border-white/10 pt-3">

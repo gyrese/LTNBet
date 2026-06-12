@@ -140,9 +140,9 @@ export default function ProfilePage() {
         {/* ── Stats bento ── */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <StatCard
-            icon="paid"
-            label="GAINS CUMULÉS"
-            value={`${currentUser.totalWinnings.toLocaleString()}`}
+            icon="emoji_events"
+            label="CUMUL CDM"
+            value={`${(currentUser.tournamentTotal + currentUser.toilesCoins).toLocaleString()}`}
             unit="TC"
             valueColor="#FFB800"
             borderStyle="neon-border-top-orange"

@@ -15,11 +15,14 @@ const pickRandomAvatarId = (excludeId?: string) => {
 
 export default function JoinPage() {
   const router = useRouter();
-  const { currentUser, registerUser } = useGameStore();
+  const { currentUser, registerUser, reclaimProfile } = useGameStore();
   const [username, setUsername] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0].id);
+  const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Mode « récupérer mon profil » (pseudo + code PIN) au lieu de l'inscription.
+  const [reclaimMode, setReclaimMode] = useState(false);
 
   const currentAvatar = getAvatarConfig(selectedAvatar);
 
@@ -36,6 +39,9 @@ export default function JoinPage() {
     }
   }, [currentUser, router]);
 
+  // N'autorise que les chiffres, max 4 → code PIN.
+  const onPinChange = (v: string) => setPin(v.replace(/\D/g, '').slice(0, 4));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -44,11 +50,27 @@ export default function JoinPage() {
     if (!trimmed) return setError('Veuillez saisir un pseudo.');
     if (trimmed.length < 3) return setError('Le pseudo doit contenir au moins 3 caractères.');
     if (trimmed.length > 15) return setError('Le pseudo ne peut pas dépasser 15 caractères.');
+    if (!/^\d{4}$/.test(pin)) return setError('Choisis un code PIN à 4 chiffres (pour retrouver ton profil).');
 
     setLoading(true);
-    const res = await registerUser(trimmed, selectedAvatar);
+    const res = await registerUser(trimmed, selectedAvatar, pin);
     if (!res.success) {
       setError(res.error || 'Inscription impossible, réessaie.');
+      setLoading(false);
+      return;
+    }
+    router.push('/');
+  };
+
+  const handleReclaim = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const trimmed = username.trim();
+    if (!trimmed || !/^\d{4}$/.test(pin)) return setError('Pseudo et code PIN à 4 chiffres requis.');
+    setLoading(true);
+    const res = await reclaimProfile(trimmed, pin);
+    if (!res.success) {
+      setError(res.error || 'Récupération impossible.');
       setLoading(false);
       return;
     }
@@ -87,6 +109,8 @@ export default function JoinPage() {
           </p>
         </div>
 
+        {!reclaimMode && (
+        <>
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Pseudo */}
           <div className="space-y-2">
@@ -148,6 +172,31 @@ export default function JoinPage() {
             </div>
           </div>
 
+          {/* Code PIN (récupération du profil sur un autre téléphone) */}
+          <div className="space-y-2">
+            <label htmlFor="pin" className="block font-label-caps text-[10px] text-on-surface-variant tracking-wider">
+              CODE PIN (4 CHIFFRES)
+            </label>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-[20px]">
+                lock
+              </span>
+              <input
+                type="text"
+                id="pin"
+                inputMode="numeric"
+                value={pin}
+                onChange={(e) => onPinChange(e.target.value)}
+                placeholder="••••"
+                autoComplete="off"
+                className="w-full bg-white/[0.04] border border-white/10 rounded-xl pl-11 pr-4 py-3 text-white font-data-mono text-[18px] tracking-[0.5em] placeholder:tracking-[0.5em] placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-transparent transition-all"
+              />
+            </div>
+            <p className="font-body-md text-[10px] text-on-surface-variant/50">
+              Souviens-toi de ce code : il sert à retrouver ton profil sur un autre téléphone.
+            </p>
+          </div>
+
           {/* CTA */}
           <button
             type="submit"
@@ -173,6 +222,74 @@ export default function JoinPage() {
             Application 100% ludique · Aucun argent réel en jeu
           </p>
         </div>
+        </>
+        )}
+
+        {/* ── Mode récupération de profil (autre appareil) ── */}
+        {reclaimMode && (
+        <form onSubmit={handleReclaim} className="space-y-6">
+          <div className="space-y-2">
+            <label htmlFor="r-username" className="block font-label-caps text-[10px] text-on-surface-variant tracking-wider">
+              TON PSEUDO
+            </label>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-[20px]">badge</span>
+              <input
+                type="text"
+                id="r-username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Le pseudo de ton profil"
+                autoComplete="off"
+                className="w-full bg-white/[0.04] border border-white/10 rounded-xl pl-11 pr-4 py-3 text-white font-body-md placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-transparent transition-all"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="r-code" className="block font-label-caps text-[10px] text-on-surface-variant tracking-wider">
+              CODE PIN (4 CHIFFRES)
+            </label>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-[20px]">lock</span>
+              <input
+                type="text"
+                id="r-code"
+                inputMode="numeric"
+                value={pin}
+                onChange={(e) => onPinChange(e.target.value)}
+                placeholder="••••"
+                autoComplete="off"
+                className="w-full bg-white/[0.04] border border-white/10 rounded-xl pl-11 pr-4 py-3 text-white font-data-mono text-[18px] tracking-[0.5em] placeholder:tracking-[0.5em] placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-transparent transition-all"
+              />
+            </div>
+            {error && (
+              <p className="text-error font-data-mono text-[12px] flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[15px]">error</span>
+                {error}
+              </p>
+            )}
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary w-full font-headline-lg-mobile text-[19px] py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+          >
+            <span className={`material-symbols-outlined text-[22px] ${loading ? 'animate-spin' : ''}`}>
+              {loading ? 'progress_activity' : 'restore'}
+            </span>
+            {loading ? 'Récupération…' : 'Récupérer mon profil'}
+          </button>
+        </form>
+        )}
+
+        {/* Bascule inscription ↔ récupération */}
+        <button
+          type="button"
+          onClick={() => { setReclaimMode((v) => !v); setError(''); }}
+          className="mt-5 w-full text-center font-body-md text-[12px] text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+        >
+          {reclaimMode ? '← Créer un nouveau profil' : 'Déjà un profil ? Récupère-le avec ton code PIN'}
+        </button>
       </motion.div>
     </div>
   );

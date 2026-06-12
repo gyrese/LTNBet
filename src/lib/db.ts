@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { broadcast } from './sse-bus';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -193,6 +194,15 @@ try { db.exec('ALTER TABLE players ADD COLUMN last_seen TEXT;'); } catch { /* ex
 // Jeton d'appareil : lie un pseudo au navigateur qui l'a créé → empêche la prise de compte (AV-1).
 try { db.exec('ALTER TABLE players ADD COLUMN device_token TEXT;'); } catch { /* exists */ }
 
+// ─── Persistance CdM : deux classements (soirée + cumul compétition) ───────────
+// tournament_total : somme des portefeuilles de fin de match déjà encaissés (cumul compétition).
+try { db.exec('ALTER TABLE players ADD COLUMN tournament_total INTEGER DEFAULT 0;'); } catch { /* exists */ }
+// current_match_id : match auquel se rapporte le portefeuille `toiles_coins` courant.
+// Sert à détecter un nouveau match → encaisser l'ancien solde + repartir à 1000 TC.
+try { db.exec('ALTER TABLE players ADD COLUMN current_match_id TEXT;'); } catch { /* exists */ }
+// recovery_code : code de secours (hashé) pour réclamer son profil depuis un autre appareil.
+try { db.exec('ALTER TABLE players ADD COLUMN recovery_code TEXT;'); } catch { /* exists */ }
+
 // Nouvelles colonnes de statistiques détaillées pour les deux équipes
 try { db.exec('ALTER TABLE matches ADD COLUMN shots_home INTEGER DEFAULT 0;'); } catch { /* exists */ }
 try { db.exec('ALTER TABLE matches ADD COLUMN shots_away INTEGER DEFAULT 0;'); } catch { /* exists */ }
@@ -256,6 +266,49 @@ if (rewardCount.count === 0) {
   insReward.run('r-cocktail', 'Cocktail Création', 'Le cocktail signature du barman offert.', 3500, '🍹');
   insReward.run('r-burger', 'Burger Toiles Noires', 'Le burger classique avec frites.', 5000, '🍔');
   insReward.run('r-cap', 'Casquette France Toiles', 'Une casquette collector aux couleurs du bar.', 4000, '🧢');
+}
+
+// ─── Persistance CdM : banque de portefeuille + code de secours ────────────────
+
+const STARTING_WALLET = 1000;
+
+/**
+ * Code de récupération = PIN à 4 chiffres choisi par le joueur.
+ * Sécurité volontairement légère (appli ludique de bar) : on hash juste le PIN
+ * en SHA-256 pour ne pas le stocker en clair.
+ */
+export function hashRecoveryCode(code: string): string {
+  return crypto.createHash('sha256').update(code.trim()).digest('hex');
+}
+
+/** Vrai si la chaîne est exactement un PIN à 4 chiffres. */
+export function isValidPin(pin: unknown): pin is string {
+  return typeof pin === 'string' && /^\d{4}$/.test(pin);
+}
+
+/**
+ * Aligne le portefeuille « soirée » d'un joueur sur le match actif.
+ * À chaque nouveau match (current_match_id ≠ activeMatchId) :
+ *   1. encaisse l'ancien solde dans le cumul compétition (tournament_total += toiles_coins) ;
+ *   2. remet le portefeuille soirée à 1000 TC ;
+ *   3. mémorise le match courant.
+ * Idempotent : ne fait rien si le joueur est déjà sur le match actif.
+ * Ne touche jamais aux bots. À appeler à la connexion/login d'un joueur.
+ */
+export function syncMatchWallet(playerId: string, activeMatchId: string): void {
+  if (!activeMatchId) return; // aucun match actif → on ne réinitialise pas
+  const p = db.prepare('SELECT current_match_id, toiles_coins, is_bot FROM players WHERE id = ?').get(playerId) as
+    | { current_match_id: string | null; toiles_coins: number; is_bot: number }
+    | undefined;
+  if (!p || p.is_bot) return;
+  if (p.current_match_id === activeMatchId) return; // déjà à jour
+  db.prepare(
+    `UPDATE players
+       SET tournament_total = tournament_total + ?,
+           toiles_coins = ?,
+           current_match_id = ?
+     WHERE id = ?`,
+  ).run(p.toiles_coins, STARTING_WALLET, activeMatchId, playerId);
 }
 
 export function suspendImpossibleOutcomes(matchId: string, homeScore: number, awayScore: number) {

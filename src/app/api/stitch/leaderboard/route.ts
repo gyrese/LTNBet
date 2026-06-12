@@ -4,7 +4,7 @@ import db from '@/lib/db';
 export async function GET() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const players = db.prepare('SELECT * FROM players ORDER BY (toiles_coins + total_winnings) DESC').all() as any[];
+    const players = db.prepare('SELECT * FROM players ORDER BY toiles_coins DESC').all() as any[];
 
     const leaderboard = players.map((p, idx) => {
       const badgesCount = p.is_bot

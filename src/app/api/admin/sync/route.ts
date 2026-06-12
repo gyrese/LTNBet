@@ -63,7 +63,7 @@ function resolveMarket(matchId: string, marketId: string, outcomeId: string) {
     for (const uid of winnerIds) progressExactScoreMission(uid);
   }
 
-  const players = db.prepare('SELECT * FROM players ORDER BY (toiles_coins + total_winnings) DESC').all() as Record<string, unknown>[];
+  const players = db.prepare('SELECT * FROM players ORDER BY toiles_coins DESC').all() as Record<string, unknown>[];
   const updRank = db.prepare('UPDATE players SET rank = ?, rank_change = ? WHERE id = ?');
   players.forEach((p, i) => {
     const newRank = i + 1;

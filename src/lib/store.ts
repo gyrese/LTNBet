@@ -9,6 +9,7 @@ export interface Player {
   avatar: string;
   toilesCoins: number;
   totalWinnings: number;
+  tournamentTotal: number;
   successfulBets: number;
   totalBets: number;
   rank: number;
@@ -134,7 +135,8 @@ interface GameStore {
   sessionChecked: boolean;
   supabaseLoaded: boolean;
 
-  registerUser: (username: string, avatar: string) => Promise<{ success: boolean; error?: string }>;
+  registerUser: (username: string, avatar: string, pin: string) => Promise<{ success: boolean; error?: string }>;
+  reclaimProfile: (username: string, pin: string) => Promise<{ success: boolean; error?: string }>;
   logoutUser: () => void;
   promoteToAdmin: () => void;
   initFromSupabase: () => Promise<void>;
@@ -243,6 +245,7 @@ const playerFromDb = (r: any): Player => ({
   avatar: r.avatar,
   toilesCoins: r.toiles_coins,
   totalWinnings: r.total_winnings,
+  tournamentTotal: r.tournament_total ?? 0,
   successfulBets: r.successful_bets,
   totalBets: r.total_bets,
   rank: r.rank ?? 99,
@@ -514,16 +517,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hasActiveMatch: true,
           myBets: [],
         });
+        // Le joueur déjà connecté sur son téléphone reçoit son nouveau portefeuille (1000 TC) :
+        // on rappelle op=player → le serveur encaisse l'ancien solde dans le cumul + remet à 1000.
+        const cu = get().currentUser;
+        if (cu) {
+          fetch(`/api/db?op=player&id=${cu.id}`)
+            .then(r => r.json())
+            .then(({ player, bets }) => {
+              if (player) {
+                const updated = playerFromDb(player);
+                lsSet('ltn_user_profile', updated);
+                set({ currentUser: updated });
+                if (bets) { const mapped = (bets as unknown[]).map(betFromDb); lsSet('ltn_user_bets', mapped); set({ myBets: mapped }); }
+              }
+            })
+            .catch(() => {});
+        }
       } else {
         set({ match: NO_MATCH, markets: [], hasActiveMatch: false, myBets: [] });
       }
     });
 
-    // Session clôturée (manuelle ou auto 30 min) : plus de match actif, retour à l'écran d'attente + déconnexion globale
+    // Session clôturée (manuelle ou auto 30 min) : plus de match actif → écran d'attente.
+    // On GARDE le joueur connecté (profil + jeton d'appareil) : la persistance du téléphone permet
+    // la reconnexion automatique au prochain match, avec son cumul + 1000 TC.
     es.addEventListener('session_closed', () => {
-      set({ match: NO_MATCH, markets: [], hasActiveMatch: false, currentUser: null });
-      clearLocalSession();
-      redirectToJoin();
+      set({ match: NO_MATCH, markets: [], hasActiveMatch: false });
     });
 
     // Déconnexion forcée : kick d'un joueur précis (userId) ou de tout le monde (all).
@@ -544,10 +563,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // ── Auth ───────────────────────────────────────────────────────────────────
 
-  registerUser: async (username: string, avatar: string) => {
+  registerUser: async (username: string, avatar: string, pin: string) => {
     // Jeton d'appareil (string brute, hors lsSet pour éviter le JSON.stringify) → lie le pseudo à ce navigateur.
     const deviceToken = typeof window !== 'undefined' ? (localStorage.getItem('ltn_device_token') || undefined) : undefined;
-    const res = await dbPost({ op: 'register', username, avatar, deviceToken });
+    const res = await dbPost({ op: 'register', username, avatar, deviceToken, pin });
     if (res?.taken || !res?.player) {
       return { success: false, error: res?.error || 'Inscription impossible, réessaie.' };
     }
@@ -558,6 +577,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     sendHeartbeat(p.id);
     get().updateLeaderboard();
     import('canvas-confetti').then(c => c.default({ particleCount: 50, spread: 60, origin: { y: 0.8 } }));
+    return { success: true };
+  },
+
+  // Récupérer son profil depuis un autre appareil via pseudo + code PIN.
+  reclaimProfile: async (username: string, pin: string) => {
+    const deviceToken = typeof window !== 'undefined' ? (localStorage.getItem('ltn_device_token') || undefined) : undefined;
+    const res = await dbPost({ op: 'reclaim', username, pin, deviceToken });
+    if (!res?.success || !res?.player) {
+      return { success: false, error: res?.error || 'Récupération impossible.' };
+    }
+    if (res.deviceToken && typeof window !== 'undefined') localStorage.setItem('ltn_device_token', res.deviceToken);
+    const p = playerFromDb(res.player);
+    lsSet('ltn_user_profile', p);
+    set({ currentUser: p });
+    sendHeartbeat(p.id);
+    get().updateLeaderboard();
     return { success: true };
   },
 
@@ -712,7 +747,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (idx !== -1) all[idx] = { ...currentUser };
       else all.push({ ...currentUser });
     }
-    all.sort((a, b) => (b.toilesCoins + b.totalWinnings) - (a.toilesCoins + a.totalWinnings));
+    all.sort((a, b) => b.toilesCoins - a.toilesCoins);
     const previousLeaderId = leaderboard[0]?.id;
     all = all.map((p, i) => {
       const oldRank = p.rank || 11;

@@ -107,6 +107,19 @@ export default function BroadcastScreen() {
   const [qrUrl, setQrUrl] = useState('');
   const [tickerEvents, setTickerEvents] = useState<{ id: string; type: string; title: string; subtitle: string }[]>([]);
   const [secs, setSecs] = useState(0);
+  // Classement affiché : par défaut « soirée » (ce match) ; bascule sur « compétition » (cumul CdM)
+  // ~1 min toutes les 15 min.
+  const [boardMode, setBoardMode] = useState<'soiree' | 'competition'>('soiree');
+
+  useEffect(() => {
+    const SHOW_EVERY = 15 * 60 * 1000; // toutes les 15 min
+    const DURATION = 60 * 1000;        // affiché 1 min
+    const id = setInterval(() => {
+      setBoardMode('competition');
+      setTimeout(() => setBoardMode('soiree'), DURATION);
+    }, SHOW_EVERY);
+    return () => clearInterval(id);
+  }, []);
 
   // Sync poll
   useEffect(() => {
@@ -149,10 +162,18 @@ export default function BroadcastScreen() {
 
   const top10 = useMemo(
     () => [...leaderboard]
-      .sort((a, b) => (b.toilesCoins + b.totalWinnings) - (a.toilesCoins + a.totalWinnings))
+      .sort((a, b) =>
+        boardMode === 'competition'
+          ? (b.tournamentTotal + b.toilesCoins) - (a.tournamentTotal + a.toilesCoins)
+          : b.toilesCoins - a.toilesCoins,
+      )
       .slice(0, 10),
-    [leaderboard],
+    [leaderboard, boardMode],
   );
+
+  const isGeneral = boardMode === 'competition';
+  const boardScore = (p: { toilesCoins: number; tournamentTotal: number }) =>
+    isGeneral ? p.tournamentTotal + p.toilesCoins : p.toilesCoins;
 
   const possHome = match.possessionHome ?? 50;
   const possAway = 100 - possHome;
@@ -460,11 +481,11 @@ export default function BroadcastScreen() {
         >
           {/* Header */}
           <div className="px-5 pt-5 pb-4 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-            <h2 style={{ fontFamily: 'var(--font-anybody)', fontSize: 16, fontWeight: 800, color: 'white', letterSpacing: '0.08em', lineHeight: 1 }}>
-              LIVE LEADERBOARD
+            <h2 style={{ fontFamily: 'var(--font-anybody)', fontSize: 16, fontWeight: 800, color: isGeneral ? GOLD : 'white', letterSpacing: '0.08em', lineHeight: 1, transition: 'color 0.4s' }}>
+              {isGeneral ? 'CLASSEMENT GÉNÉRAL' : 'CLASSEMENT SOIRÉE'}
             </h2>
             <p style={{ fontSize: 10, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.38)', marginTop: 3, fontWeight: 700 }}>
-              TOP 10 PLAYERS
+              {isGeneral ? 'CUMUL COUPE DU MONDE' : 'TOP 10 · CE MATCH'}
             </p>
           </div>
 
@@ -496,7 +517,7 @@ export default function BroadcastScreen() {
                 <Avatar player={player} size={28} />
                 <span className="flex-1 font-bold truncate" style={{ fontSize: 13 }}>{player.username}</span>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 12, fontWeight: 700, color: MEDAL_COLORS[i], flexShrink: 0 }}>
-                  {(player.toilesCoins + player.totalWinnings).toLocaleString()} pts
+                  {boardScore(player).toLocaleString()} pts
                 </span>
               </div>
             ))}
@@ -512,7 +533,7 @@ export default function BroadcastScreen() {
                 <Avatar player={player} size={24} />
                 <span className="flex-1 truncate" style={{ fontSize: 13, fontWeight: 600 }}>{player.username}</span>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 12, fontWeight: 700, color: '#7da4ff', flexShrink: 0 }}>
-                  {(player.toilesCoins + player.totalWinnings).toLocaleString()} pts
+                  {boardScore(player).toLocaleString()} pts
                 </span>
               </div>
             ))}

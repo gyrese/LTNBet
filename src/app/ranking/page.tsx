@@ -50,7 +50,7 @@ const PODIUM_META = {
   },
 } as const;
 
-function PodiumCard({ player, place }: { player: Player; place: 1 | 2 | 3 }) {
+function PodiumCard({ player, place, score }: { player: Player; place: 1 | 2 | 3; score: number }) {
   const cfg = getAvatarConfig(player.avatar);
   const meta = PODIUM_META[place];
 
@@ -105,7 +105,10 @@ function PodiumCard({ player, place }: { player: Player; place: 1 | 2 | 3 }) {
             boxShadow: place === 1 ? `0 0 16px ${meta.medal}` : 'none',
           }}
         />
-        <span className={`font-headline-lg-mobile text-[14px] md:text-[16px] ${meta.accent} truncate w-full text-center`}>
+        <span
+          className={`${meta.accent} truncate w-full text-center font-bold`}
+          style={{ fontFamily: 'var(--font-anybody)', fontSize: place === 1 ? 18 : 15, letterSpacing: '0.02em', lineHeight: 1.1 }}
+        >
           {player.username}
         </span>
         <span
@@ -115,18 +118,26 @@ function PodiumCard({ player, place }: { player: Player; place: 1 | 2 | 3 }) {
             border: '1px solid rgba(255,255,255,0.10)',
           }}
         >
-          {(player.toilesCoins + player.totalWinnings).toLocaleString()} TC
+          {score.toLocaleString()} TC
         </span>
       </div>
     </motion.div>
   );
 }
 
+// Score affiché selon le classement choisi :
+//  - 'soiree'      → portefeuille du match en cours (consos)
+//  - 'competition' → cumul encaissé sur toute la CdM + portefeuille actuel
+type RankMode = 'soiree' | 'competition';
+const scoreFor = (p: Player, mode: RankMode) =>
+  mode === 'competition' ? p.tournamentTotal + p.toilesCoins : p.toilesCoins;
+
 export default function RankingPage() {
   const router = useRouter();
   const { currentUser, match, leaderboard, updateLeaderboard } = useGameStore();
   const [timeLeft, setTimeLeft] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [mode, setMode] = useState<RankMode>('soiree');
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -168,14 +179,18 @@ export default function RankingPage() {
 
   if (!mounted || !currentUser) return null;
 
-  const allPlayers = [...leaderboard];
+  // Copies superficielles → on peut réécrire `rank` sans muter les objets du store.
+  const allPlayers = leaderboard.map((p) => ({ ...p }));
   const userIdx = allPlayers.findIndex((p) => p.id === currentUser.id);
   if (userIdx !== -1) {
     allPlayers[userIdx] = { ...currentUser };
   } else {
     allPlayers.push({ ...currentUser });
   }
-  allPlayers.sort((a, b) => (b.toilesCoins + b.totalWinnings) - (a.toilesCoins + a.totalWinnings));
+  allPlayers.sort((a, b) => scoreFor(b, mode) - scoreFor(a, mode));
+  // Rang recalculé selon le classement affiché (le rang stocké suit le portefeuille soirée).
+  allPlayers.forEach((p, i) => { p.rank = i + 1; });
+  const myRank = allPlayers.find((p) => p.id === currentUser.id)?.rank ?? currentUser.rank;
 
   const top1 = allPlayers[0];
   const top2 = allPlayers[1];
@@ -232,11 +247,41 @@ export default function RankingPage() {
           </div>
         </div>
 
+        {/* Onglets : classement de la soirée (consos) vs cumul compétition */}
+        <div className="flex justify-center mb-8">
+          <div
+            className="inline-flex p-1 rounded-2xl gap-1"
+            style={{ background: 'rgba(123,97,255,0.06)', border: '1px solid rgba(123,97,255,0.14)' }}
+          >
+            {([
+              { id: 'soiree', label: 'Soirée', sub: 'Consos' },
+              { id: 'competition', label: 'Compétition', sub: 'Cumul CdM' },
+            ] as const).map((t) => {
+              const active = mode === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setMode(t.id)}
+                  className="px-5 md:px-7 py-2 rounded-xl transition-all flex flex-col items-center leading-tight"
+                  style={
+                    active
+                      ? { background: 'linear-gradient(135deg, rgba(123,97,255,0.30), rgba(77,168,255,0.20))', border: '1px solid rgba(123,97,255,0.45)' }
+                      : { border: '1px solid transparent' }
+                  }
+                >
+                  <span className={`font-label-caps text-[12px] tracking-wide ${active ? 'text-white' : 'text-on-surface-variant'}`}>{t.label}</span>
+                  <span className={`font-label-caps text-[8px] tracking-widest ${active ? 'text-primary' : 'text-on-surface-variant/50'}`}>{t.sub}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Podium */}
         <div className="flex justify-center items-end gap-2 md:gap-6 mb-10 h-[230px] md:h-[270px] max-w-2xl mx-auto">
-          {top2 && <PodiumCard player={top2} place={2} />}
-          {top1 && <PodiumCard player={top1} place={1} />}
-          {top3 && <PodiumCard player={top3} place={3} />}
+          {top2 && <PodiumCard player={top2} place={2} score={scoreFor(top2, mode)} />}
+          {top1 && <PodiumCard player={top1} place={1} score={scoreFor(top1, mode)} />}
+          {top3 && <PodiumCard player={top3} place={3} score={scoreFor(top3, mode)} />}
         </div>
 
         {/* Player list */}
@@ -297,7 +342,7 @@ export default function RankingPage() {
                     </span>
                   </div>
                   <span className="font-data-mono text-primary text-right font-bold tabular">
-                    {(player.toilesCoins + player.totalWinnings).toLocaleString()}
+                    {scoreFor(player, mode).toLocaleString()}
                   </span>
                   <div className="flex justify-center">{getRankChangeIcon(player.rankChange)}</div>
                 </motion.div>
@@ -324,7 +369,7 @@ export default function RankingPage() {
               className="font-headline-lg-mobile text-[28px] font-bold tabular"
               style={{ color: '#9278FF', textShadow: '0 0 18px rgba(123,97,255,0.5)' }}
             >
-              #{currentUser.rank}
+              #{myRank}
             </span>
             <div className="flex items-center gap-3">
               <div
@@ -353,10 +398,10 @@ export default function RankingPage() {
           <div className="flex items-center gap-5">
             <div className="text-right">
               <span className="block font-label-caps text-[9px] mb-0.5 tracking-wider" style={{ color: 'rgba(146,120,255,0.70)' }}>
-                VOTRE SCORE
+                {mode === 'competition' ? 'CUMUL CDM' : 'VOTRE SCORE'}
               </span>
               <span className="font-data-mono text-primary font-bold text-[16px] tabular">
-                {(currentUser.toilesCoins + currentUser.totalWinnings).toLocaleString()} TC
+                {scoreFor(currentUser, mode).toLocaleString()} TC
               </span>
             </div>
             <div

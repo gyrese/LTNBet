@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import db, { suspendImpossibleOutcomes, awardEarnedBadges, progressExactScoreMission } from '@/lib/db';
-import { broadcast } from '@/lib/sse-bus';
+import db, { suspendImpossibleOutcomes, awardEarnedBadges, progressExactScoreMission, syncMatchWallet, isValidPin, hashRecoveryCode } from '@/lib/db';
+import { broadcast, publicJSON } from '@/lib/sse-bus';
 import { calculateDynamicOdds } from '@/lib/odds';
 import { triggerWebhooks } from '@/lib/webhooks';
 import { getParsedOdds } from '@/lib/odds-provider';
@@ -45,7 +45,7 @@ function archiveMatch(matchId: string): string | null {
   `).all(matchId) as Row[];
   const leaderboard = db.prepare(`
     SELECT id, username, avatar, is_bot, toiles_coins, total_winnings, successful_bets, total_bets, rank
-    FROM players ORDER BY (toiles_coins + total_winnings) DESC
+    FROM players ORDER BY toiles_coins DESC
   `).all() as Row[];
 
   const archive = {
@@ -81,7 +81,12 @@ function closeAndArchive(matchId: string): string | null {
 }
 
 function json(data: unknown, status = 200) {
-  return NextResponse.json(data, { status });
+  // publicJSON retire les champs sensibles (device_token, recovery_code) des lignes joueur.
+  // Le jeton d'appareil légitime est renvoyé à part (deviceToken en camelCase).
+  return new NextResponse(publicJSON(data), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 }
 
 // ─── GET /api/db?op=<operation> ───────────────────────────────────────────────
@@ -145,6 +150,9 @@ export async function GET(req: NextRequest) {
   if (op === 'player') {
     const id = req.nextUrl.searchParams.get('id');
     if (!id) return json({ error: 'missing id' }, 400);
+    // Reprise auto de session (sans passer par register) : aligne le portefeuille soirée
+    // sur le match actif (encaisse l'ancien solde + repart à 1000 TC si nouveau match).
+    syncMatchWallet(id, getActiveMatchId());
     const player = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
     if (!player) return json({ player: null }, 200);
     const bets = db.prepare('SELECT * FROM bets WHERE user_id = ? ORDER BY created_at DESC').all(id);
@@ -220,7 +228,8 @@ export async function POST(req: NextRequest) {
 
   // ── Register player (or login if exists) ──
   if (op === 'register') {
-    const { username, avatar, deviceToken } = body;
+    const { username, avatar, deviceToken, pin } = body;
+    const activeMatchId = getActiveMatchId();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existingPlayer = db.prepare('SELECT * FROM players WHERE username = ?').get(username) as any;
     if (existingPlayer) {
@@ -229,6 +238,12 @@ export async function POST(req: NextRequest) {
         // Compte historique sans jeton : le premier navigateur qui revient l'adopte.
         const token = deviceToken || crypto.randomUUID();
         db.prepare('UPDATE players SET avatar = ?, device_token = ? WHERE id = ?').run(avatar, token, existingPlayer.id);
+        // Comptes d'avant la fonctionnalité sans PIN : on enregistre celui saisi (s'il est valide).
+        if (!existingPlayer.recovery_code && isValidPin(pin)) {
+          db.prepare('UPDATE players SET recovery_code = ? WHERE id = ?').run(hashRecoveryCode(pin), existingPlayer.id);
+        }
+        // Nouveau match ? → encaisse l'ancien solde dans le cumul + repart à 1000 TC.
+        syncMatchWallet(existingPlayer.id, activeMatchId);
         const player = db.prepare('SELECT * FROM players WHERE id = ?').get(existingPlayer.id);
         broadcast('player_update', player);
         return json({ player, deviceToken: token });
@@ -236,18 +251,23 @@ export async function POST(req: NextRequest) {
       if (deviceToken && stored === deviceToken) {
         // Reprise de session depuis le MÊME appareil → autorisée.
         db.prepare('UPDATE players SET avatar = ? WHERE id = ?').run(avatar, existingPlayer.id);
+        syncMatchWallet(existingPlayer.id, activeMatchId);
         const player = db.prepare('SELECT * FROM players WHERE id = ?').get(existingPlayer.id);
         broadcast('player_update', player);
         return json({ player, deviceToken: stored });
       }
       // Pseudo déjà pris par un autre appareil → refus (empêche le vol de compte/solde).
-      return json({ taken: true, error: 'Ce pseudo est déjà utilisé. Choisis-en un autre.' }, 409);
+      // Le joueur peut récupérer son profil via son code PIN (op 'reclaim').
+      return json({ taken: true, error: 'Ce pseudo est déjà utilisé. Utilise ton code PIN pour le récupérer.' }, 409);
     }
+
+    // Nouveau compte : un PIN à 4 chiffres est obligatoire (sert à récupérer le profil ailleurs).
+    if (!isValidPin(pin)) return json({ success: false, error: 'Choisis un code PIN à 4 chiffres.' }, 400);
 
     const id = 'user-' + crypto.randomUUID().slice(0, 8);
     const newToken = deviceToken || crypto.randomUUID();
-    db.prepare(`INSERT INTO players (id,username,avatar,toiles_coins,total_winnings,successful_bets,total_bets,rank,rank_change,is_bot,device_token) VALUES (?,?,?,1000,0,0,0,99,'same',0,?)`)
-      .run(id, username, avatar, newToken);
+    db.prepare(`INSERT INTO players (id,username,avatar,toiles_coins,total_winnings,successful_bets,total_bets,rank,rank_change,is_bot,device_token,current_match_id,recovery_code) VALUES (?,?,?,1000,0,0,0,99,'same',0,?,?,?)`)
+      .run(id, username, avatar, newToken, activeMatchId || null, hashRecoveryCode(pin));
 
     // Initialize player missions
     const allMissions = db.prepare('SELECT id FROM missions').all() as { id: string }[];
@@ -259,6 +279,25 @@ export async function POST(req: NextRequest) {
     const player = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
     broadcast('player_update', player);
     return json({ player, deviceToken: newToken });
+  }
+
+  // ── Récupérer un profil depuis un autre appareil (pseudo + code PIN) ──
+  if (op === 'reclaim') {
+    const { username, pin, deviceToken } = body;
+    if (!username || !isValidPin(pin)) return json({ success: false, error: 'Pseudo et code PIN (4 chiffres) requis.' }, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const player = db.prepare('SELECT * FROM players WHERE username = ?').get(username) as any;
+    if (!player || player.is_bot) return json({ success: false, error: 'Profil introuvable.' }, 404);
+    if (!player.recovery_code || player.recovery_code !== hashRecoveryCode(pin)) {
+      return json({ success: false, error: 'Code PIN incorrect.' }, 403);
+    }
+    // PIN valide → on relie ce nouvel appareil au profil (nouveau jeton).
+    const token = deviceToken || crypto.randomUUID();
+    db.prepare('UPDATE players SET device_token = ? WHERE id = ?').run(token, player.id);
+    syncMatchWallet(player.id, getActiveMatchId());
+    const updated = db.prepare('SELECT * FROM players WHERE id = ?').get(player.id);
+    broadcast('player_update', updated);
+    return json({ success: true, player: updated, deviceToken: token });
   }
 
   // ── Place bet ──
@@ -358,7 +397,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Recalculate ranking & broadcast leaderboard
-    const players = db.prepare('SELECT * FROM players ORDER BY (toiles_coins + total_winnings) DESC').all() as any[];
+    const players = db.prepare('SELECT * FROM players ORDER BY toiles_coins DESC').all() as any[];
     const updRank = db.prepare('UPDATE players SET rank = ?, rank_change = ? WHERE id = ?');
     players.forEach((p, i) => {
       const newRank = i + 1;
@@ -566,7 +605,7 @@ export async function POST(req: NextRequest) {
 
   // ── Update leaderboard rankings ──
   if (op === 'update_leaderboard') {
-    const players = db.prepare('SELECT * FROM players ORDER BY (toiles_coins + total_winnings) DESC').all() as Record<string, unknown>[];
+    const players = db.prepare('SELECT * FROM players ORDER BY toiles_coins DESC').all() as Record<string, unknown>[];
     const updRank = db.prepare('UPDATE players SET rank = ?, rank_change = ? WHERE id = ?');
     players.forEach((p, i) => {
       const newRank = i + 1;

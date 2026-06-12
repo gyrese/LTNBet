@@ -18,7 +18,7 @@ interface MatchResult {
   leagueSlug: string;
 }
 type OddsSource = 'api' | 'default' | 'manual';
-interface BlueprintOutcome { id: string; name: string; baseOdds: number; oddsSource: OddsSource }
+interface BlueprintOutcome { id: string; name: string; baseOdds: number; oddsSource: OddsSource; disabled?: boolean }
 interface BlueprintMarket { id: string; type: string; title: string; outcomes: BlueprintOutcome[] }
 
 interface Props {
@@ -177,11 +177,40 @@ export default function StartSessionModal({ open, onClose, onCreated }: Props) {
     );
   };
 
+  const toggleOutcome = (marketId: string, outcomeId: string) => {
+    setMarkets((prev) =>
+      prev.map((m) =>
+        m.id !== marketId
+          ? m
+          : {
+              ...m,
+              outcomes: m.outcomes.map((o) =>
+                o.id !== outcomeId ? o : { ...o, disabled: !o.disabled },
+              ),
+            },
+      ),
+    );
+  };
+
   // ── Lancement de la session ──
   const launch = async () => {
     if (!selected) return;
+
+    // Filter active markets/outcomes
+    const activeMarkets = markets
+      .map((m) => ({
+        ...m,
+        outcomes: m.outcomes.filter((o) => !o.disabled),
+      }))
+      .filter((m) => m.outcomes.length > 0);
+
+    if (activeMarkets.length === 0) {
+      setError('Vous devez activer au moins une cote avant de lancer la session.');
+      return;
+    }
+
     // Garde-fou : cotes valides (> 1)
-    const bad = markets.some((m) => m.outcomes.some((o) => !(Number(o.baseOdds) > 1)));
+    const bad = activeMarkets.some((m) => m.outcomes.some((o) => !(Number(o.baseOdds) > 1)));
     if (bad) {
       setError('Toutes les cotes doivent être supérieures à 1.00.');
       return;
@@ -192,7 +221,7 @@ export default function StartSessionModal({ open, onClose, onCreated }: Props) {
       const res = await fetch('/api/db', {
         method: 'POST',
         headers: adminHeaders(),
-        body: JSON.stringify({ op: 'create_session', force: true, match: selected, markets }),
+        body: JSON.stringify({ op: 'create_session', force: true, match: selected, markets: activeMarkets }),
       }).then((r) => r.json());
       if (res.success) {
         onCreated(`Session lancée : ${selected.homeTeam} vs ${selected.awayTeam}`);
@@ -323,26 +352,42 @@ export default function StartSessionModal({ open, onClose, onCreated }: Props) {
                 <div className="text-center py-12 text-sm text-on-surface-variant/60 font-data-mono">Chargement des matchs…</div>
               ) : results.length > 0 ? (
                 <div className="divide-y divide-white/5 border border-white/8 bg-white/[0.01] rounded-2xl overflow-hidden">
-                  {results.map((m) => (
-                    <div key={m.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-white/[0.02] transition-colors">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-body-md font-bold text-white text-[14px] truncate">{m.homeTeam} <span className="text-on-surface-variant/40">vs</span> {m.awayTeam}</span>
-                          <span className={`text-[9px] font-label-caps px-2 py-0.5 rounded-full border ${statusBadge(m.status)}`}>{m.status.toUpperCase()}</span>
+                  {results.map((m) => {
+                    const isPast = new Date(m.startsAt).getTime() <= Date.now() || m.status === 'finished';
+                    const statusText = m.status === 'upcoming' && isPast ? 'PASSÉ' : m.status.toUpperCase();
+                    const badgeClass = m.status === 'upcoming' && isPast
+                      ? 'bg-white/5 border-white/10 text-on-surface-variant/60'
+                      : statusBadge(m.status);
+                    return (
+                      <div key={m.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-white/[0.02] transition-colors">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-body-md font-bold text-white text-[14px] truncate">{m.homeTeam} <span className="text-on-surface-variant/40">vs</span> {m.awayTeam}</span>
+                            <span className={`text-[9px] font-label-caps px-2 py-0.5 rounded-full border ${badgeClass}`}>{statusText}</span>
+                          </div>
+                          <span className="block text-[10px] font-data-mono text-on-surface-variant/60 mt-1 truncate">
+                            {m.league ? `${m.league} · ` : ''}{new Date(m.startsAt).toLocaleString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            {m.status === 'live' && ` · ${m.homeScore}-${m.awayScore}`}
+                          </span>
                         </div>
-                        <span className="block text-[10px] font-data-mono text-on-surface-variant/60 mt-1 truncate">
-                          {m.league ? `${m.league} · ` : ''}{new Date(m.startsAt).toLocaleString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          {m.status === 'live' && ` · ${m.homeScore}-${m.awayScore}`}
-                        </span>
+                        {isPast ? (
+                          <button
+                            disabled
+                            className="bg-white/5 border border-white/10 text-on-surface-variant/40 font-label-caps text-[10px] px-4 py-2 rounded-xl whitespace-nowrap shrink-0 cursor-not-allowed"
+                          >
+                            Passé
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => selectMatch(m)}
+                            className="bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary font-label-caps text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap shrink-0"
+                          >
+                            Choisir
+                          </button>
+                        )}
                       </div>
-                      <button
-                        onClick={() => selectMatch(m)}
-                        className="bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary font-label-caps text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        Choisir
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-12 text-sm text-on-surface-variant/40 font-data-mono">
@@ -391,22 +436,45 @@ export default function StartSessionModal({ open, onClose, onCreated }: Props) {
                 <div key={mk.id} className="bg-white/[0.02] border border-white/6 rounded-2xl p-3.5">
                   <span className="block font-label-caps text-[10px] text-on-surface tracking-wider mb-2.5">{mk.title}</span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {mk.outcomes.map((o) => (
-                      <div key={o.id} className="flex items-center justify-between gap-2 bg-white/[0.02] border border-white/8 rounded-xl px-3 py-2">
-                        <span className="flex items-center gap-2 min-w-0">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${o.oddsSource === 'api' ? 'bg-emerald-400' : o.oddsSource === 'manual' ? 'bg-tertiary' : 'bg-white/30'}`} />
-                          <span className="text-[12px] text-on-surface truncate">{o.name}</span>
-                        </span>
-                        <input
-                          type="number"
-                          step="0.05"
-                          min="1.01"
-                          value={o.baseOdds}
-                          onChange={(e) => updateOdds(mk.id, o.id, e.target.value)}
-                          className="w-20 shrink-0 bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-white text-[13px] font-data-mono text-center focus:outline-none focus:ring-2 focus:ring-primary/40 tabular"
-                        />
-                      </div>
-                    ))}
+                    {mk.outcomes.map((o) => {
+                      const isDisabled = o.disabled === true;
+                      return (
+                        <div
+                          key={o.id}
+                          className={`flex items-center justify-between gap-2 border rounded-xl px-3 py-2 transition-all ${
+                            isDisabled
+                              ? 'bg-black/20 border-white/5 opacity-40'
+                              : 'bg-white/[0.02] border-white/8'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => toggleOutcome(mk.id, o.id)}
+                              className="text-on-surface-variant/60 hover:text-white shrink-0 flex items-center justify-center transition-colors focus:outline-none"
+                              title={isDisabled ? 'Activer cette cote' : 'Désactiver cette cote'}
+                            >
+                              <span className={`material-symbols-outlined text-[22px] ${isDisabled ? 'text-white/20' : 'text-emerald-400'}`}>
+                                {isDisabled ? 'toggle_off' : 'toggle_on'}
+                              </span>
+                            </button>
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isDisabled ? 'bg-white/10' : o.oddsSource === 'api' ? 'bg-emerald-400' : o.oddsSource === 'manual' ? 'bg-tertiary' : 'bg-white/30'}`} />
+                            <span className={`text-[12px] truncate ${isDisabled ? 'text-on-surface-variant/40 line-through' : 'text-on-surface'}`}>{o.name}</span>
+                          </div>
+                          <input
+                            type="number"
+                            step="0.05"
+                            min="1.01"
+                            value={o.baseOdds}
+                            disabled={isDisabled}
+                            onChange={(e) => updateOdds(mk.id, o.id, e.target.value)}
+                            className={`w-20 shrink-0 bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-[13px] font-data-mono text-center focus:outline-none focus:ring-2 focus:ring-primary/40 tabular ${
+                              isDisabled ? 'opacity-30 cursor-not-allowed' : 'text-white'
+                            }`}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}

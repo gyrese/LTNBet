@@ -8,7 +8,7 @@ import { triggerWebhooks } from '@/lib/webhooks';
 import { getParsedOdds } from '@/lib/odds-provider';
 import { buildSessionBlueprint, type BlueprintMarket } from '@/lib/session-blueprint';
 import { getOnlinePlayers, countOnline, clearPresence, getActiveLeaderboardPlayers } from '@/lib/presence';
-import { resolveHalftimeMarkets, resolveFulltimeMarkets } from '@/lib/resolve';
+import { resolveHalftimeMarkets, resolveHalftimeFromScorers, resolveFulltimeMarkets, resolveFirstScorerMarket, type ResolveScorer } from '@/lib/resolve';
 
 const ARCHIVE_DIR = path.join(process.cwd(), 'data', 'archives');
 const CLOSE_AFTER_MS = 30 * 60 * 1000; // 30 min après la fin du match
@@ -26,6 +26,15 @@ function getActiveMatchId(): string {
   // restée ouverte après clôture modifierait silencieusement un match terminé (AV-7).
   const row = getActiveMatchRow();
   return row ? (row.id as string) : '';
+}
+
+/** Buteurs persistés sur le match (alimentés par l'API au fil des syncs) → résolution 1er buteur. */
+function parsePersistedScorers(raw: unknown): ResolveScorer[] {
+  if (!raw || typeof raw !== 'string') return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
 }
 
 // Construit l'archive JSON complète d'un match (résultats + paris + classement) et l'écrit sur disque.
@@ -473,7 +482,11 @@ export async function POST(req: NextRequest) {
       resolveHalftimeMarkets(match.id, match.home_team, match.away_team, match.home_score, match.away_score, true);
     } else if (match && stats.status === 'finished') {
       const corners = (match.corners_home as number) ?? 0;
+      const scorers = parsePersistedScorers(match.scorers);
       resolveFulltimeMarkets(match.id, match.home_team, match.away_team, match.home_score, match.away_score, corners, corners > 0);
+      // Filet : marchés mi-temps non encore résolus (si on n'est jamais passé par la pause).
+      resolveHalftimeFromScorers(match.id, match.home_team, match.away_team, scorers, match.home_score, match.away_score);
+      resolveFirstScorerMarket(match.id, scorers, match.home_team, match.away_team);
     }
 
     // Trigger webhooks
@@ -495,10 +508,15 @@ export async function POST(req: NextRequest) {
     db.prepare("UPDATE matches SET status = 'finished', finished_at = COALESCE(finished_at, ?) WHERE id = ?").run(new Date().toISOString(), activeMatchId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(activeMatchId) as any;
-    // Résolution auto des marchés de fin (résultat, score, BTTS, +2.5, corners). Buteur = manuel.
+    // Résolution auto des marchés de fin (résultat, score, BTTS, +2.5, corners, double chance,
+    // +1.5/+3.5, clean sheets). Premier buteur : auto-résolu si un nom correspond, sinon manuel.
     if (match) {
       const corners = (match.corners_home as number) ?? 0;
+      const scorers = parsePersistedScorers(match.scorers);
       resolveFulltimeMarkets(match.id, match.home_team, match.away_team, match.home_score, match.away_score, corners, corners > 0);
+      // Filet : marchés mi-temps non encore résolus (si on n'est jamais passé par la pause).
+      resolveHalftimeFromScorers(match.id, match.home_team, match.away_team, scorers, match.home_score, match.away_score);
+      resolveFirstScorerMarket(match.id, scorers, match.home_team, match.away_team);
     }
     triggerWebhooks('match.finished', match);
     broadcast('match_update', match);

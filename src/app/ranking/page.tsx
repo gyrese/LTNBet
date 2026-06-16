@@ -149,8 +149,10 @@ export default function RankingPage() {
     if (mounted) updateLeaderboard();
   }, [currentUser, router, updateLeaderboard, mounted]);
 
+  // Poll de sync : actif dès qu'un match existe et n'est pas terminé (avant-match inclus →
+  // coup d'envoi automatique). Le serveur limite le débit, donc plusieurs pollers sont sans risque.
   useEffect(() => {
-    if (match.status !== 'live' && match.status !== 'half_time') return;
+    if (!match.id || match.status === 'finished') return;
     const syncInterval = setInterval(async () => {
       try {
         await fetch('/api/admin/sync');
@@ -159,7 +161,7 @@ export default function RankingPage() {
       }
     }, 15000);
     return () => clearInterval(syncInterval);
-  }, [match.status]);
+  }, [match.id, match.status]);
 
   useEffect(() => {
     const updateTimer = () => {

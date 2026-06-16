@@ -30,30 +30,22 @@ export default function HomePage() {
   const [betStatusMsg, setBetStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [goals, setGoals] = useState<{ id: string; type: string; title: string; subtitle: string; meta?: string }[]>([]);
   const [showStats, setShowStats] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
-    if (!hasActiveMatch) return;
-    const fetchGoals = async () => {
-      try {
-        const res = await fetch('/api/db?op=ticker').then((r) => r.json());
-        if (res.events) {
-          const goalEvents = res.events.filter((e: any) => e.type === 'goal');
-          setGoals(goalEvents);
-        }
-      } catch (err) {
-        console.error('Error fetching goals:', err);
-      }
-    };
-    fetchGoals();
-  }, [hasActiveMatch, match.homeScore, match.awayScore]);
-
-  useEffect(() => {
     if (mounted && !currentUser) router.push('/join');
   }, [currentUser, router, mounted]);
+
+  // Polling de sync : tout client connecté (téléphone inclus) fait avancer le match. Le serveur
+  // limite le débit (un seul appel API par fenêtre) → robuste même si l'écran TV n'est pas ouvert.
+  // Tourne dès qu'un match est actif et non terminé (y compris « avant-match » → coup d'envoi auto).
+  useEffect(() => {
+    if (!hasActiveMatch || match.status === 'finished') return;
+    const id = setInterval(() => { fetch('/api/admin/sync').catch(() => {}); }, 15000);
+    return () => clearInterval(id);
+  }, [hasActiveMatch, match.status]);
 
   // Quand on se connecte (currentUser défini) et qu'un match est actif, on affiche le haut de la page
   useEffect(() => {
@@ -246,50 +238,30 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Scorers list */}
-            {goals.length > 0 && (
+            {/* Scorers list — liste complète et exacte tenue à jour depuis l'API (nom + minute) */}
+            {match.scorers.length > 0 && (
               <div className="w-full max-w-md mx-auto mt-4 grid grid-cols-2 gap-4 text-xs font-data-mono text-on-surface-variant/80 border-t border-white/5 pt-3">
                 {/* Home scorers */}
                 <div className="text-right space-y-1 pr-2 border-r border-white/5">
-                  {goals
-                    .filter((g) => {
-                      try {
-                        const meta = g.meta ? (typeof g.meta === 'string' ? JSON.parse(g.meta) : g.meta) : null;
-                        return meta?.team === 'home';
-                      } catch {
-                        return false;
-                      }
-                    })
-                    .map((g) => {
-                      const meta = g.meta ? (typeof g.meta === 'string' ? JSON.parse(g.meta) : g.meta) : null;
-                      return (
-                        <div key={g.id} className="flex items-center justify-end gap-1.5">
-                          <span className="material-symbols-outlined text-[13px]" style={{ color: '#FF6B20' }}>sports_soccer</span>
-                          <span>{meta?.scorer || 'Buteur'}</span>
-                        </div>
-                      );
-                    })}
+                  {match.scorers
+                    .filter((s) => s.team === 'home')
+                    .map((s, i) => (
+                      <div key={`h-${i}-${s.playerName}-${s.minute}`} className="flex items-center justify-end gap-1.5">
+                        <span className="material-symbols-outlined text-[13px]" style={{ color: '#FF6B20' }}>sports_soccer</span>
+                        <span>{s.playerName}{s.minute ? ` ${s.minute}'` : ''}</span>
+                      </div>
+                    ))}
                 </div>
                 {/* Away scorers */}
                 <div className="text-left space-y-1 pl-2">
-                  {goals
-                    .filter((g) => {
-                      try {
-                        const meta = g.meta ? (typeof g.meta === 'string' ? JSON.parse(g.meta) : g.meta) : null;
-                        return meta?.team === 'away';
-                      } catch {
-                        return false;
-                      }
-                    })
-                    .map((g) => {
-                      const meta = g.meta ? (typeof g.meta === 'string' ? JSON.parse(g.meta) : g.meta) : null;
-                      return (
-                        <div key={g.id} className="flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-[13px]" style={{ color: '#4DA8FF' }}>sports_soccer</span>
-                          <span>{meta?.scorer || 'Buteur'}</span>
-                        </div>
-                      );
-                    })}
+                  {match.scorers
+                    .filter((s) => s.team === 'away')
+                    .map((s, i) => (
+                      <div key={`a-${i}-${s.playerName}-${s.minute}`} className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[13px]" style={{ color: '#4DA8FF' }}>sports_soccer</span>
+                        <span>{s.playerName}{s.minute ? ` ${s.minute}'` : ''}</span>
+                      </div>
+                    ))}
                 </div>
               </div>
             )}

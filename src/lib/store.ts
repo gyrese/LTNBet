@@ -42,6 +42,13 @@ export interface Match {
   foulsAway: number;
   passesAccuracyHome: number;
   passesAccuracyAway: number;
+  scorers: Scorer[];
+}
+
+export interface Scorer {
+  team: 'home' | 'away';
+  playerName: string;
+  minute: number;
 }
 
 export interface Outcome {
@@ -122,7 +129,7 @@ export interface RewardLedger {
 
 export interface GameEvent {
   id: string;
-  type: 'goal' | 'jackpot' | 'leader_change' | 'half_time' | 'finished' | 'badge' | 'flash_market' | 'double_gains';
+  type: 'goal' | 'jackpot' | 'leader_change' | 'half_time' | 'finished' | 'badge' | 'flash_market' | 'double_gains' | 'kickoff';
   title: string;
   subtitle: string;
   meta?: Record<string, unknown>;
@@ -216,7 +223,17 @@ const matchFromDb = (r: any): Match => ({
   foulsAway: r.fouls_away ?? 0,
   passesAccuracyHome: r.passes_accuracy_home ?? 80,
   passesAccuracyAway: r.passes_accuracy_away ?? 80,
+  scorers: parseScorers(r.scorers),
 });
+
+// Buteurs persistés en JSON sur le match (alimentés par l'API au fil des syncs).
+function parseScorers(raw: unknown): Scorer[] {
+  if (!raw || typeof raw !== 'string') return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter((s) => s && (s.team === 'home' || s.team === 'away')) : [];
+  } catch { return []; }
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const outcomeFromDb = (r: any): Outcome => ({
@@ -392,6 +409,7 @@ const NO_MATCH: Match = {
   finishedAt: null, sessionClosed: false,
   shotsHome: 0, shotsAway: 0, shotsOnTargetAway: 0, cornersAway: 0, cardsAway: 0,
   foulsHome: 0, foulsAway: 0, passesAccuracyHome: 80, passesAccuracyAway: 80,
+  scorers: [],
 };
 
 // ─── Store ────────────────────────────────────────────────────────────────────

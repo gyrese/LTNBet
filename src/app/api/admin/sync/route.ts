@@ -1,208 +1,49 @@
 import { NextResponse } from 'next/server';
-import db, { suspendImpossibleOutcomes, awardEarnedBadges, progressExactScoreMission } from '@/lib/db';
+import db, { suspendImpossibleOutcomes } from '@/lib/db';
 import { broadcast } from '@/lib/sse-bus';
 import { triggerWebhooks } from '@/lib/webhooks';
-import { getActiveLeaderboardPlayers } from '@/lib/presence';
 import { getLiveData } from '@/lib/live-provider';
 import type { MatchRow, ScorerEvent } from '@/lib/live-provider';
 import type { ApifStats } from '@/lib/api-football-provider';
+import { resolveHalftimeMarkets, resolveHalftimeFromScorers, resolveFulltimeMarkets, resolveFirstScorerMarket } from '@/lib/resolve';
 
 // Migrations de colonnes au démarrage
 for (const sql of [
   'ALTER TABLE matches ADD COLUMN last_sync_at TEXT;',
   'ALTER TABLE matches ADD COLUMN fd_match_id TEXT;',
+  // Liste complète des buteurs (JSON [{team,playerName,minute}]) tenue à jour depuis l'API →
+  // affichage fiable des « bons buteurs » côté joueurs/écran (corrige les noms au fil des syncs).
+  'ALTER TABLE matches ADD COLUMN scorers TEXT;',
+  // ID ESPN auto-découvert ("slug:eventId") — source gratuite score/buteurs.
+  'ALTER TABLE matches ADD COLUMN espn_id TEXT;',
 ]) { try { db.exec(sql); } catch { /* existe déjà */ } }
 
-// ─── Résolution des marchés ────────────────────────────────────────────────────
+type Status = 'upcoming' | 'live' | 'half_time' | 'finished';
 
-function resolveMarket(matchId: string, marketId: string, outcomeId: string) {
-  db.prepare('UPDATE markets SET is_closed = 1, resolved_outcome_id = ? WHERE id = ?').run(outcomeId, marketId);
+// ─── Machine à états pilotée par le temps (secours quand l'API ne répond pas) ──
+//
+// Principe : l'API (statut réel 1H/HT/2H/FT) PRIME quand elle répond → précision maximale.
+// Sinon, on dérive l'état du match à partir de l'heure de coup d'envoi (`starts_at`) pour
+// que le match se déroule TOUJOURS automatiquement (coup d'envoi → mi-temps → 2e période →
+// fin), même si l'API gratuite est en panne / hors quota. Les seuils sont généreux pour
+// éviter une mi-temps/fin prématurée si on dépend du temps.
+const KICK_GRACE_MIN = 3;     // l'API dit « pas commencé » mais l'heure est passée depuis ≥3 min → on lance
+const HARD_FINISH_MIN = 130;  // filet ultime : un match qui traîne au-delà est forcé terminé
 
-  const pendingBets = db.prepare(`SELECT * FROM bets WHERE market_id = ? AND status = 'pending'`).all(marketId) as Record<string, unknown>[];
-  const settings = db.prepare('SELECT * FROM game_settings WHERE match_id = ?').get(matchId) as { double_gains_active: number } | undefined;
-  const doubleGains = settings?.double_gains_active === 1;
-
-  for (const bet of pendingBets) {
-    if (bet.outcome_id === outcomeId) {
-      const mult = doubleGains ? (bet.odds_at_bet as number) * 2 : (bet.odds_at_bet as number);
-      const payout = Math.round((bet.amount as number) * mult);
-      db.prepare(`UPDATE bets SET status = 'won', payout = ? WHERE id = ?`).run(payout, bet.id);
-      db.prepare('UPDATE players SET toiles_coins = toiles_coins + ?, total_winnings = total_winnings + ?, successful_bets = successful_bets + 1 WHERE id = ?').run(payout, payout, bet.user_id);
-    } else {
-      db.prepare(`UPDATE bets SET status = 'lost', payout = 0 WHERE id = ?`).run(bet.id);
-    }
-  }
-
-  const resolvedMarket = db.prepare('SELECT * FROM markets WHERE id = ?').get(marketId);
-  const allOutcomes = db.prepare('SELECT * FROM outcomes WHERE market_id = ?').all(marketId);
-  broadcast('market_update', { ...resolvedMarket as object, outcomes: allOutcomes });
-
-  for (const bet of pendingBets) {
-    const p = db.prepare('SELECT * FROM players WHERE id = ?').get(bet.user_id);
-    if (p) broadcast('player_update', p);
-  }
-
-  // Attribution des badges aux gagnants (Oracle Bleu, Visionnaire, Roi des Buteurs, Nostradamus).
-  const winnerIds = new Set(pendingBets.filter(b => b.outcome_id === outcomeId).map(b => b.user_id as string));
-  for (const uid of winnerIds) {
-    const newBadges = awardEarnedBadges(uid);
-    if (!newBadges.length) continue;
-    const pl = db.prepare('SELECT username FROM players WHERE id = ?').get(uid) as { username: string } | undefined;
-    for (const code of newBadges) {
-      const bd = db.prepare('SELECT title FROM badges WHERE code = ?').get(code) as { title: string } | undefined;
-      const subtitle = `${pl?.username || 'Un joueur'} débloque « ${bd?.title || code} » !`;
-      db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'badge', ?, ?)`)
-        .run(`ge-badge-${uid}-${code}-${Date.now()}`, matchId, 'NOUVEAU BADGE ! 🏅', subtitle);
-      broadcast('game_event', { type: 'badge', title: 'NOUVEAU BADGE ! 🏅', subtitle });
-    }
-    broadcast('player_update', db.prepare('SELECT * FROM players WHERE id = ?').get(uid));
-  }
-
-  // Mission « score exact » (cosmétique) : complétée pour les gagnants de ce marché.
-  if ((resolvedMarket as { type?: string } | undefined)?.type === 'exact_score') {
-    for (const uid of winnerIds) progressExactScoreMission(uid);
-  }
-
-  const players = db.prepare('SELECT * FROM players ORDER BY toiles_coins DESC').all() as Record<string, unknown>[];
-  const updRank = db.prepare('UPDATE players SET rank = ?, rank_change = ? WHERE id = ?');
-  players.forEach((p, i) => {
-    const newRank = i + 1;
-    const oldRank = (p.rank as number) || 99;
-    const change = newRank < oldRank ? 'up' : newRank > oldRank ? 'down' : 'same';
-    updRank.run(newRank, change, p.id);
-  });
-  broadcast('leaderboard_update', getActiveLeaderboardPlayers(matchId));
+function timeBackboneStatus(mins: number): Status {
+  if (mins < 0) return 'upcoming';
+  if (mins < 48) return 'live';        // 1re période (+ temps additionnel)
+  if (mins < 63) return 'half_time';   // pause ~15 min
+  if (mins < HARD_FINISH_MIN) return 'live'; // 2e période
+  return 'finished';
 }
 
-/** Logue les marchés encore ouverts après résolution (résolution manuelle requise). */
-function warnUnresolvedMarkets(matchId: string, context: string) {
-  const open = db.prepare("SELECT title FROM markets WHERE match_id = ? AND is_closed = 0").all(matchId) as { title: string }[];
-  if (open.length) {
-    console.warn(`[resolve] ${context}: ${open.length} marché(s) non résolu(s) automatiquement → à régler dans l'admin : ${open.map(m => m.title).join(', ')}`);
-  }
-}
-
-/**
- * Résolution marchés de mi-temps.
- * @param reliable false → score de pause non fiable, on ne résout pas (évite de faux résultats).
- */
-function resolveHalftimeMarkets(
-  matchId: string,
-  homeTeam: string,
-  awayTeam: string,
-  htHome: number,
-  htAway: number,
-  reliable: boolean = true,
-) {
-  if (!reliable) {
-    const open = db.prepare("SELECT title FROM markets WHERE match_id = ? AND type IN ('halftime_result','halftime_score') AND is_closed = 0").all(matchId) as { title: string }[];
-    if (open.length) console.warn(`[resolve] mi-temps: score non fiable → ${open.length} marché(s) laissé(s) pour résolution manuelle : ${open.map(m => m.title).join(', ')}`);
-    return;
-  }
-
-  const htResultMarket = db.prepare("SELECT * FROM markets WHERE type = 'halftime_result' AND match_id = ?").get(matchId) as Record<string, unknown> | undefined;
-  if (htResultMarket && !htResultMarket.is_closed) {
-    let name = 'Nul';
-    if (htHome > htAway) name = homeTeam;
-    else if (htHome < htAway) name = awayTeam;
-    const w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = ?").get(htResultMarket.id, name) as Record<string, unknown> | undefined;
-    if (w) resolveMarket(matchId, htResultMarket.id as string, w.id as string);
-  }
-
-  const htScoreMarket = db.prepare("SELECT * FROM markets WHERE type = 'halftime_score' AND match_id = ?").get(matchId) as Record<string, unknown> | undefined;
-  if (htScoreMarket && !htScoreMarket.is_closed) {
-    const scoreStr = `${htHome}-${htAway}`;
-    let w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = ?").get(htScoreMarket.id, scoreStr) as Record<string, unknown> | undefined;
-    if (!w) w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = 'Autre Score'").get(htScoreMarket.id) as Record<string, unknown> | undefined;
-    if (w) resolveMarket(matchId, htScoreMarket.id as string, w.id as string);
-  }
-}
-
-/**
- * Résolution marchés de fin de match.
- * @param cornerDataAvailable false → pas de données de corners, marché laissé ouvert.
- */
-function resolveFulltimeMarkets(
-  matchId: string,
-  homeTeam: string,
-  awayTeam: string,
-  homeScore: number,
-  awayScore: number,
-  cornersHome: number,
-  cornerDataAvailable: boolean = true,
-) {
-  // 1. Score exact — avec catch-all « Autre Score »
-  const scoreMarket = db.prepare("SELECT * FROM markets WHERE type = 'exact_score' AND match_id = ?").get(matchId) as Record<string, unknown> | undefined;
-  if (scoreMarket && !scoreMarket.is_closed) {
-    const finalScore = `${homeScore}-${awayScore}`;
-    let w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = ?").get(scoreMarket.id, finalScore) as Record<string, unknown> | undefined;
-    if (!w) w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = 'Autre Score'").get(scoreMarket.id) as Record<string, unknown> | undefined;
-    if (w) resolveMarket(matchId, scoreMarket.id as string, w.id as string);
-    else console.warn(`[resolve] exact_score: aucune issue « ${finalScore} » ni « Autre Score » → résolution manuelle requise`);
-  }
-
-  // 2. Résultat final
-  const resultMarket = db.prepare("SELECT * FROM markets WHERE type = 'final_result' AND match_id = ?").get(matchId) as Record<string, unknown> | undefined;
-  if (resultMarket && !resultMarket.is_closed) {
-    let name = 'Nul';
-    if (homeScore > awayScore) name = homeTeam;
-    else if (homeScore < awayScore) name = awayTeam;
-    const w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = ?").get(resultMarket.id, name) as Record<string, unknown> | undefined;
-    if (w) resolveMarket(matchId, resultMarket.id as string, w.id as string);
-  }
-
-  // 3. BTTS
-  const bttsMarket = db.prepare("SELECT * FROM markets WHERE type = 'btts' AND match_id = ?").get(matchId) as Record<string, unknown> | undefined;
-  if (bttsMarket && !bttsMarket.is_closed) {
-    const name = (homeScore > 0 && awayScore > 0) ? 'Oui' : 'Non';
-    const w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = ?").get(bttsMarket.id, name) as Record<string, unknown> | undefined;
-    if (w) resolveMarket(matchId, bttsMarket.id as string, w.id as string);
-  }
-
-  // 4. Plus/Moins 2.5 buts
-  const ou25Market = db.prepare("SELECT * FROM markets WHERE type = 'over_under_25' AND match_id = ?").get(matchId) as Record<string, unknown> | undefined;
-  if (ou25Market && !ou25Market.is_closed) {
-    const name = (homeScore + awayScore > 2.5) ? 'Oui' : 'Non';
-    const w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = ?").get(ou25Market.id, name) as Record<string, unknown> | undefined;
-    if (w) resolveMarket(matchId, ou25Market.id as string, w.id as string);
-  }
-
-  // 5. Corners — uniquement si données disponibles (sinon résolution manuelle)
-  const cornersMarket = db.prepare("SELECT * FROM markets WHERE type = 'corners_count' AND match_id = ?").get(matchId) as Record<string, unknown> | undefined;
-  if (cornersMarket && !cornersMarket.is_closed) {
-    if (!cornerDataAvailable) {
-      console.warn(`[resolve] corners: pas de données de corners (session sans stats) → résolution manuelle requise (marché ${cornersMarket.id})`);
-    } else {
-      let name = 'Moins de 5';
-      if (cornersHome >= 5 && cornersHome <= 7) name = 'Entre 5 et 7';
-      else if (cornersHome > 7) name = 'Plus de 7';
-      const w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = ?").get(cornersMarket.id, name) as Record<string, unknown> | undefined;
-      if (w) resolveMarket(matchId, cornersMarket.id as string, w.id as string);
-    }
-  }
-
-  // 6. Résolution des nouveaux marchés additionnels (type: 'flash')
-  const resolveYesNo = (suffix: string, condition: boolean) => {
-    const mId = `m-${matchId}-${suffix}`;
-    const m = db.prepare("SELECT * FROM markets WHERE id = ?").get(mId) as Record<string, unknown> | undefined;
-    if (m && !m.is_closed) {
-      const winnerName = condition ? 'Oui' : 'Non';
-      const w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = ?").get(m.id, winnerName) as Record<string, unknown> | undefined;
-      if (w) resolveMarket(matchId, m.id as string, w.id as string);
-    }
-  };
-
-  resolveYesNo('dc-home-nul', homeScore >= awayScore);
-  resolveYesNo('dc-away-nul', awayScore >= homeScore);
-  resolveYesNo('dc-home-away', homeScore !== awayScore);
-  resolveYesNo('ou15', (homeScore + awayScore) > 1.5);
-  resolveYesNo('ou35', (homeScore + awayScore) > 3.5);
-  resolveYesNo('home-over15', homeScore > 1.5);
-  resolveYesNo('away-over15', awayScore > 1.5);
-  resolveYesNo('home-cleansheet', awayScore === 0);
-  resolveYesNo('away-cleansheet', homeScore === 0);
-
-  warnUnresolvedMarkets(matchId, 'fin de match');
+/** Minute de jeu estimée depuis le coup d'envoi (secours quand l'API ne fournit pas de minute). */
+function fallbackElapsed(mins: number): number {
+  if (mins <= 0) return 0;
+  if (mins <= 45) return Math.floor(mins);
+  if (mins < 63) return 45;                       // figé à 45' pendant la pause
+  return Math.min(90, Math.floor(mins) - 17);     // 2e période : on retire ~17 min de pause
 }
 
 // ─── Helpers sync ─────────────────────────────────────────────────────────────
@@ -221,7 +62,7 @@ function emitGoalEvent(
 
   // Trouver le dernier buteur de l'équipe si disponible
   const lastScorer = [...scorers].reverse().find(s => s.team === scoringTeam);
-  const scorer = lastScorer?.playerName ?? `${teamName} Striker`;
+  const scorer = lastScorer?.playerName ?? `${teamName}`;
 
   const title = `BUT POUR ${String(teamName).toUpperCase()} ! ⚽`;
   const subtitle = `${scorer} marque ! (${newScore})`;
@@ -234,32 +75,11 @@ function emitGoalEvent(
   broadcast('game_event', { type: 'goal', title, subtitle, meta: { team: scoringTeam } });
 }
 
-/**
- * Logue un indice pour aider l'admin à résoudre manuellement le marché "Premier Buteur".
- * (La résolution automatique est impossible sans lier les noms de joueurs aux outcomes "Vedette".)
- */
-function logFirstScorerHint(matchId: string, scorers: ScorerEvent[], homeTeam: string, awayTeam: string) {
-  const market = db.prepare("SELECT * FROM markets WHERE type = 'first_scorer' AND match_id = ? AND is_closed = 0").get(matchId) as Record<string, unknown> | undefined;
-  if (!market) return;
-
-  if (!scorers.length) {
-    console.warn(`[resolve] first_scorer (${matchId}): marché ouvert, aucun buteur connu → résolution manuelle requise`);
-    return;
-  }
-
-  const first = scorers[0];
-  const team = first.team === 'home' ? homeTeam : awayTeam;
-  console.warn(
-    `[resolve] first_scorer (${matchId}): marché ouvert → résolution manuelle requise.\n` +
-    `  1er buteur connu : ${first.playerName} (${team}, ${first.minute}') — Vedette ${team} ou Autre Buteur ?`,
-  );
-}
-
-/** Intervalle de sync. API-Football primaire (quota ~100 req/jour) → on espace pour tenir tout le match. */
+/** Intervalle de sync. ESPN (gratuit, sans quota) fournit le score/buteurs à chaque cycle → on peut
+ *  rafraîchir souvent. API-Football n'est appelé que pour les stats, cachées 5 min (STATS_TTL) → le
+ *  quota (~100 req/j) tient largement même à 20 s (≈ 2 appels API-Football toutes les 5 min). */
 function syncIntervalMs(match: MatchRow): number {
-  // 1 appel fixture (score) par cycle + stats cachées (STATS_TTL). À 90 s : ~70 cycles sur un match
-  // de 2 h → on reste sous le quota. Le score reste pilotable EN DIRECT à la main depuis /admin.
-  return match.status === 'half_time' ? 180_000 : 90_000;
+  return match.status === 'half_time' ? 60_000 : 20_000;
 }
 
 // ─── Simulateur local (aucune clé API configurée) ─────────────────────────────
@@ -302,7 +122,7 @@ function handleSimulator(match: MatchRow, now: number): ReturnType<typeof NextRe
   if (rand < 0.025) {
     const side = Math.random() > 0.55 ? 'home' : 'away';
     if (side === 'home') homeScore++; else awayScore++;
-    const scorer = side === 'home' ? `${match.home_team} Striker` : `${match.away_team} Striker`;
+    const scorer = side === 'home' ? `${match.home_team}` : `${match.away_team}`;
     const title = `BUT POUR ${(side === 'home' ? match.home_team : match.away_team).toUpperCase()} ! ⚽`;
     const subtitle = `${scorer} marque ! (${homeScore} - ${awayScore})`;
     db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle, meta) VALUES (?, ?, 'goal', ?, ?, ?)`).run(
@@ -335,19 +155,31 @@ export async function GET() {
   try {
     const match = db.prepare('SELECT * FROM matches WHERE is_active = 1 LIMIT 1').get() as MatchRow | undefined;
     if (!match) return NextResponse.json({ success: true, message: 'Aucun match actif' });
-
-    if (!['live', 'half_time'].includes(match.status)) {
-      return NextResponse.json({ success: true, message: `Match non en direct (${match.status})` });
-    }
+    if (match.status === 'finished') return NextResponse.json({ success: true, message: 'Match terminé', match });
 
     const now = Date.now();
+    const kickoffMs = match.starts_at ? new Date(match.starts_at as string).getTime() : now;
+    const mins = (now - kickoffMs) / 60_000;
 
-    // Passer en mode simulateur si aucun identifiant externe n'est lié au match.
+    // ── Avant le coup d'envoi : rien à faire (et AUCUN appel API → on préserve le quota) ──
+    if (match.status === 'upcoming' && now < kickoffMs) {
+      return NextResponse.json({ success: true, message: 'Avant le coup d’envoi', startsInSec: Math.round((kickoffMs - now) / 1000), match });
+    }
+
+    // ── Mode simulateur : aucun identifiant externe lié au match ──
     const hasExternalIds = !!(match.odds_event_id || match.apifs_id ||
       match.id.startsWith('oai-') || match.id.startsWith('apifs-'));
 
     if (!hasExternalIds) {
-      // Vérifier l'intervalle simulateur (14s)
+      // Auto coup d'envoi du simulateur (l'heure de coup d'envoi est atteinte).
+      if (match.status === 'upcoming') {
+        db.prepare("UPDATE matches SET status = 'live', elapsed_time = 0 WHERE id = ?").run(match.id);
+        db.prepare(`INSERT OR IGNORE INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'kickoff', ?, ?)`)
+          .run('ge-ko-' + match.id, match.id, 'COUP D’ENVOI ! ⚽', `${match.home_team} – ${match.away_team}, c’est parti !`);
+        broadcast('game_event', { type: 'kickoff', title: 'COUP D’ENVOI ! ⚽', subtitle: `${match.home_team} – ${match.away_team}` });
+        match.status = 'live';
+        match.elapsed_time = 0;
+      }
       if (match.last_sync_at && now - new Date(match.last_sync_at as string).getTime() < 14_000) {
         return NextResponse.json({ success: true, message: 'Sync simulateur trop rapide', match });
       }
@@ -355,25 +187,14 @@ export async function GET() {
       return handleSimulator(match, now);
     }
 
-    // Délai de grace mi-temps pour API-Football sans odds-api (évite de brûler le quota pendant la pause)
-    if (!match.odds_event_id && match.status === 'half_time') {
-      const htEvent = db.prepare("SELECT created_at FROM game_events WHERE match_id = ? AND type = 'half_time' ORDER BY created_at DESC LIMIT 1").get(match.id) as { created_at: string } | undefined;
-      if (htEvent) {
-        const htTime = new Date(htEvent.created_at.replace(' ', 'T') + 'Z').getTime();
-        if (now - htTime < 14 * 60_000) {
-          return NextResponse.json({ success: true, message: 'Mi-temps (< 14 min) — sync externe ignorée', match });
-        }
-      }
-    }
-
-    // Rate limiting
+    // ── Rate limiting (préserve le quota API) ──
     const interval = syncIntervalMs(match);
     if (match.last_sync_at && now - new Date(match.last_sync_at as string).getTime() < interval) {
       return NextResponse.json({ success: true, message: `Sync trop rapide (requis: ${interval / 1000}s)`, match });
     }
     db.prepare('UPDATE matches SET last_sync_at = ? WHERE id = ?').run(new Date(now).toISOString(), match.id);
 
-    // ── Récupération des données live (orchestrateur 3 sources) ─────────────────
+    // ── Récupération des données live (orchestrateur 3 sources) ──
     const liveData = await getLiveData(match);
 
     // Persistance des IDs auto-découverts pour les prochains syncs
@@ -383,26 +204,81 @@ export async function GET() {
     if (liveData?.discoveredFdId) {
       db.prepare('UPDATE matches SET fd_match_id = ? WHERE id = ?').run(String(liveData.discoveredFdId), match.id);
     }
-
-    if (!liveData) {
-      return NextResponse.json({ success: true, message: 'Aucune donnée live disponible (tous les providers ont échoué)', match });
+    if (liveData?.discoveredEspnId) {
+      db.prepare('UPDATE matches SET espn_id = ? WHERE id = ?').run(liveData.discoveredEspnId, match.id);
     }
 
-    const { score, status, halftimeScore, stats, scorers, cornerDataAvailable } = liveData;
-    const homeScore = score.home;
-    const awayScore = score.away;
+    // ── Détermination du statut effectif : API si disponible, sinon secours par le temps ──
+    let status: Status;
+    let homeScore: number;
+    let awayScore: number;
+    let halftimeScore: { home: number; away: number } | null;
+    let stats: ApifStats | null;
+    let scorers: ScorerEvent[];
+    let cornerDataAvailable: boolean;
+    let elapsedTime: number;
+    let hasFreshData = false;
 
-    // ── Détection de but ────────────────────────────────────────────────────────
+    if (liveData) {
+      status = liveData.status;
+      homeScore = liveData.score.home;
+      awayScore = liveData.score.away;
+      halftimeScore = liveData.halftimeScore;
+      stats = liveData.stats;
+      scorers = liveData.scorers;
+      cornerDataAvailable = liveData.cornerDataAvailable;
+      elapsedTime = liveData.elapsedTime || fallbackElapsed(mins);
+      hasFreshData = true;
+      // L'API dit encore « pas commencé » mais l'heure est largement passée → on lance par le temps.
+      if (status === 'upcoming' && mins >= KICK_GRACE_MIN) status = 'live';
+    } else {
+      // Aucune source n'a répondu → on pilote entièrement par le temps (score = dernier connu en DB).
+      status = timeBackboneStatus(mins);
+      homeScore = match.home_score as number;
+      awayScore = match.away_score as number;
+      halftimeScore = null;
+      stats = null;
+      scorers = [];
+      cornerDataAvailable = false;
+      elapsedTime = fallbackElapsed(mins);
+    }
+
+    // Filet ultime : un match qui traîne anormalement est clôturé (évite un blocage en « live »).
+    if (status !== 'finished' && mins >= HARD_FINISH_MIN) status = 'finished';
+    // Ne jamais régresser vers « upcoming » une fois le match lancé (anti flip-flop si l'API lague).
+    if (match.status !== 'upcoming' && status === 'upcoming') status = match.status as Status;
+
+    // Liste des buteurs : celle de ce cycle si l'API en a fourni, sinon la dernière persistée.
+    let effectiveScorers: ScorerEvent[] = scorers;
+    if (!effectiveScorers.length && match.scorers) {
+      try { effectiveScorers = JSON.parse(match.scorers as string) as ScorerEvent[]; } catch { /* ignore */ }
+    }
+
+    // ── Détection de but ──
     if (homeScore > (match.home_score as number) || awayScore > (match.away_score as number)) {
       emitGoalEvent(match, homeScore, awayScore, scorers, now);
     }
 
-    // ── Transitions de statut → résolution des marchés ──────────────────────────
+    // ── Transitions de statut ──
     if (status !== match.status) {
-      if (status === 'half_time') {
+      if (status === 'live' && match.status === 'upcoming') {
+        db.prepare(`INSERT OR IGNORE INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'kickoff', ?, ?)`)
+          .run('ge-ko-' + match.id, match.id, 'COUP D’ENVOI ! ⚽', `${match.home_team} – ${match.away_team}, c’est parti !`);
+        triggerWebhooks('match.status_change', { status: 'live', time_elapsed: 0 });
+        broadcast('game_event', { type: 'kickoff', title: 'COUP D’ENVOI ! ⚽', subtitle: `${match.home_team} – ${match.away_team}` });
+
+      } else if (status === 'live' && match.status === 'half_time') {
+        // Reprise automatique de la 2e période.
+        db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'kickoff', ?, ?)`)
+          .run('ge-2h-' + now, match.id, '2E PÉRIODE ! ⚽', 'Reprise du match.');
+        triggerWebhooks('match.status_change', { status: 'live' });
+        broadcast('game_event', { type: 'kickoff', title: '2E PÉRIODE ! ⚽', subtitle: 'Reprise du match.' });
+
+      } else if (status === 'half_time') {
         db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'half_time', ?, ?)`).run('ge-ht-' + now, match.id, 'MI-TEMPS ! ⏸️', 'Fin de la première période.');
-        // À la pause, le score courant EST le score de la mi-temps → fiable.
-        resolveHalftimeMarkets(match.id, match.home_team, match.away_team, homeScore, awayScore, true);
+        // À la pause, le score courant EST le score de la mi-temps → fiable UNIQUEMENT si une source
+        // a confirmé le score ce cycle (sinon mi-temps déclenchée par le temps sur un score incertain).
+        resolveHalftimeMarkets(match.id, match.home_team, match.away_team, homeScore, awayScore, hasFreshData);
         triggerWebhooks('match.status_change', { status: 'half_time' });
         broadcast('game_event', { type: 'half_time', title: 'MI-TEMPS ! ⏸️', subtitle: 'Fin de la première période.' });
 
@@ -410,34 +286,41 @@ export async function GET() {
         const subtitle = `Score final : ${match.home_team} ${homeScore} - ${awayScore} ${match.away_team}`;
         db.prepare(`INSERT INTO game_events (id, match_id, type, title, subtitle) VALUES (?, ?, 'finished', ?, ?)`).run('ge-ft-' + now, match.id, 'FIN DU MATCH ! 🏁', subtitle);
 
-        // Mi-temps : fiable seulement si on a un score de pause distinct (jamais le score final).
-        const htReliable = halftimeScore !== null;
-        resolveHalftimeMarkets(
-          match.id, match.home_team, match.away_team,
-          halftimeScore?.home ?? homeScore, halftimeScore?.away ?? awayScore,
-          htReliable,
-        );
+        // Mi-temps : score de pause distinct de l'API si dispo, sinon reconstitué depuis les buteurs
+        // (buts avant la 46e). Idempotent : ignoré si déjà résolu à la transition mi-temps.
+        if (halftimeScore !== null) {
+          resolveHalftimeMarkets(match.id, match.home_team, match.away_team, halftimeScore.home, halftimeScore.away, true);
+        } else {
+          resolveHalftimeFromScorers(match.id, match.home_team, match.away_team, effectiveScorers, homeScore, awayScore);
+        }
 
         resolveFulltimeMarkets(
           match.id, match.home_team, match.away_team,
           homeScore, awayScore,
-          (stats as ApifStats | null)?.cornersHome ?? (match.corners_home as number) ?? 0,
+          stats?.cornersHome ?? (match.corners_home as number) ?? 0,
           cornerDataAvailable,
         );
 
-        logFirstScorerHint(match.id, scorers, match.home_team, match.away_team);
+        // Premier buteur : auto-résolu uniquement si le nom correspond de façon fiable (sinon manuel).
+        resolveFirstScorerMarket(match.id, effectiveScorers, match.home_team, match.away_team);
         triggerWebhooks('match.finished', { id: match.id, home_score: homeScore, away_score: awayScore });
         broadcast('game_event', { type: 'finished', title: 'FIN DU MATCH ! 🏁', subtitle });
       }
     }
 
-    // ── Mise à jour DB ───────────────────────────────────────────────────────────
-    const setClauses: string[] = ['home_score = ?', 'away_score = ?', 'status = ?'];
-    const params: unknown[] = [homeScore, awayScore, status];
+    // ── Mise à jour DB ──
+    const setClauses: string[] = ['home_score = ?', 'away_score = ?', 'status = ?', 'elapsed_time = ?'];
+    const params: unknown[] = [homeScore, awayScore, status, elapsedTime];
 
-    if (liveData.elapsedTime) {
-      setClauses.push('elapsed_time = ?');
-      params.push(liveData.elapsedTime);
+    if (status === 'finished') {
+      setClauses.push('finished_at = COALESCE(finished_at, ?)');
+      params.push(new Date(now).toISOString());
+    }
+
+    // Buteurs : on n'écrase la liste persistée QUE si une source fraîche (API/FD) a répondu ce cycle.
+    if (hasFreshData && liveData && liveData.sources.some(s => s.startsWith('api-football') || s.startsWith('football-data'))) {
+      setClauses.push('scorers = ?');
+      params.push(JSON.stringify(scorers));
     }
 
     if (stats) {
@@ -469,7 +352,7 @@ export async function GET() {
     const updatedMatch = db.prepare('SELECT * FROM matches WHERE id = ?').get(match.id);
     broadcast('match_update', updatedMatch);
 
-    return NextResponse.json({ success: true, sources: liveData.sources, match: updatedMatch });
+    return NextResponse.json({ success: true, sources: liveData?.sources ?? ['time-backbone'], match: updatedMatch });
 
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

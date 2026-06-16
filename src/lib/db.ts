@@ -223,6 +223,10 @@ try { db.exec('ALTER TABLE matches ADD COLUMN fouls_home INTEGER DEFAULT 0;'); }
 try { db.exec('ALTER TABLE matches ADD COLUMN fouls_away INTEGER DEFAULT 0;'); } catch { /* exists */ }
 try { db.exec('ALTER TABLE matches ADD COLUMN passes_accuracy_home INTEGER DEFAULT 80;'); } catch { /* exists */ }
 try { db.exec('ALTER TABLE matches ADD COLUMN passes_accuracy_away INTEGER DEFAULT 80;'); } catch { /* exists */ }
+// Liste des buteurs tenue à jour depuis l'API (JSON [{team,playerName,minute}]) → affichage fiable.
+try { db.exec('ALTER TABLE matches ADD COLUMN scorers TEXT;'); } catch { /* exists */ }
+// ID ESPN auto-découvert ("leagueSlug:eventId") — source gratuite score/statut/buteurs.
+try { db.exec('ALTER TABLE matches ADD COLUMN espn_id TEXT;'); } catch { /* exists */ }
 
 // Seed bots (joueurs fictifs du classement) si la table est vide.
 // NB : aucun match de démo n'est créé — l'hôte lance lui-même la session depuis /admin.

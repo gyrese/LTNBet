@@ -34,6 +34,13 @@ const EVENT_VISUALS: Record<string, { icon: string; ring: string; grad: string; 
     glow: 'shadow-[0_0_40px_rgba(157,180,255,0.6)]',
     iconColor: 'text-primary',
   },
+  kickoff: {
+    icon: 'sports_soccer',
+    ring: 'border-emerald-400',
+    grad: 'from-emerald-500/40 to-emerald-700/30',
+    glow: 'shadow-[0_0_40px_rgba(16,185,129,0.5)]',
+    iconColor: 'text-white',
+  },
   half_time: {
     icon: 'pause_circle',
     ring: 'border-primary',

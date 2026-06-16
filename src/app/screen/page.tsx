@@ -7,85 +7,136 @@ import { getAvatarConfig } from '@/lib/avatars';
 import { logoForTeam } from '@/lib/flags';
 import TeamFlag from '@/components/TeamFlag';
 import GameEventOverlay from '@/components/GameEventOverlay';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const ORANGE = '#FF6B00';
+const ORANGE = '#FF5000';
 const CYAN = '#00C8FF';
-const GOLD = '#FFD700';
+const GOLD = '#FFB800';
 const SILVER = '#C0C0C0';
 const BRONZE = '#CD7F32';
 
 const MEDAL_COLORS = [GOLD, SILVER, BRONZE];
 const MEDAL_GLOWS = [
-  '0 0 18px rgba(255,215,0,0.45)',
-  '0 0 14px rgba(192,192,192,0.3)',
-  '0 0 14px rgba(205,127,50,0.3)',
+  '0 0 20px rgba(255,184,0,0.55)',
+  '0 0 15px rgba(192,192,192,0.4)',
+  '0 0 15px rgba(205,127,50,0.4)',
 ];
 
-// --- SVG Donut for possession ---
+// --- SVG Donut for Possession ---
 function PossessionDonut({ home }: { home: number }) {
   const r = 38;
-  const stroke = 14;
-  const size = 100;
+  const stroke = 8;
+  const size = 110;
   const c = size / 2;
   const circumference = 2 * Math.PI * r;
   const homeArc = (home / 100) * circumference;
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}
+    <svg 
+      width={size} 
+      height={size} 
+      viewBox={`0 0 ${size} ${size}`}
       style={{ transform: 'rotate(-90deg)', display: 'block', margin: '0 auto' }}
+      className="drop-shadow-[0_0_12px_rgba(255,80,0,0.2)]"
     >
-      <circle cx={c} cy={c} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={stroke} />
+      <circle cx={c} cy={c} r={r} fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth={stroke} />
       <circle
-        cx={c} cy={c} r={r} fill="none"
-        stroke={CYAN} strokeWidth={stroke}
-        strokeDasharray={`${circumference - homeArc} ${circumference}`}
-        strokeDashoffset={-homeArc}
+        cx={c}
+        cy={c}
+        r={r}
+        fill="none"
+        stroke={CYAN}
+        strokeWidth={stroke}
+        strokeDasharray={`${circumference} ${circumference}`}
+        strokeDashoffset={homeArc}
+        strokeLinecap="round"
+        className="transition-all duration-700 ease-out"
       />
       <circle
-        cx={c} cy={c} r={r} fill="none"
-        stroke={ORANGE} strokeWidth={stroke}
+        cx={c}
+        cy={c}
+        r={r}
+        fill="none"
+        stroke={ORANGE}
+        strokeWidth={stroke}
         strokeDasharray={`${homeArc} ${circumference}`}
+        strokeLinecap="round"
+        className="transition-all duration-700 ease-out"
       />
     </svg>
   );
 }
 
-// --- Shot bars ---
-function ShotBars({ home, away }: { home: number; away: number }) {
-  const max = Math.max(home, away, 1);
+// --- Bidirectional Comparative Stats Bar ---
+function StatCompareBar({ label, homeVal, awayVal }: { label: string; homeVal: number; awayVal: number }) {
+  const total = (homeVal + awayVal) || 1;
+  const homePct = (homeVal / total) * 100;
+  const awayPct = 100 - homePct;
+
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2">
-        <span style={{ fontSize: 11, color: ORANGE, fontWeight: 700, fontFamily: 'var(--font-jetbrains)', width: 20, textAlign: 'right' }}>{home}</span>
-        <div className="flex-1 h-3.5 rounded-sm overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-          <div className="h-full rounded-sm transition-all duration-700"
-            style={{ width: `${(home / max) * 100}%`, background: `linear-gradient(90deg, ${ORANGE}, rgba(255,150,30,0.7))` }} />
-        </div>
+    <div className="flex flex-col gap-1 w-full">
+      <div className="flex justify-between items-center text-xs px-1">
+        <span className="font-jetbrains font-bold text-home select-none">{homeVal}</span>
+        <span className="font-hanken font-bold text-on-surface-variant/75 text-[10px] tracking-wider uppercase select-none">{label}</span>
+        <span className="font-jetbrains font-bold text-away select-none">{awayVal}</span>
       </div>
-      <div className="flex items-center gap-2">
-        <span style={{ fontSize: 11, color: CYAN, fontWeight: 700, fontFamily: 'var(--font-jetbrains)', width: 20, textAlign: 'right' }}>{away}</span>
-        <div className="flex-1 h-3.5 rounded-sm overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-          <div className="h-full rounded-sm transition-all duration-700"
-            style={{ width: `${(away / max) * 100}%`, background: `linear-gradient(90deg, ${CYAN}, rgba(0,180,255,0.6))` }} />
+      <div className="h-2 w-full rounded-full overflow-hidden bg-white/5 flex">
+        {/* Home progress (Orange) - aligned right */}
+        <div className="h-full flex-1 flex justify-end bg-white/0">
+          <div 
+            className="h-full rounded-l-full bg-gradient-to-l from-home to-[#FF8000]/60 transition-all duration-700 ease-out" 
+            style={{ width: `${homePct}%` }} 
+          />
+        </div>
+        {/* Center line separator */}
+        <div className="w-0.5 h-full bg-white/20 shrink-0" />
+        {/* Away progress (Blue) - aligned left */}
+        <div className="h-full flex-1 flex justify-start bg-white/0">
+          <div 
+            className="h-full rounded-r-full bg-gradient-to-r from-away to-[#00C8FF]/60 transition-all duration-700 ease-out" 
+            style={{ width: `${awayPct}%` }} 
+          />
         </div>
       </div>
     </div>
   );
 }
 
-// --- Card slots (up to 4 small squares) ---
-function CardSlots({ count, color }: { count: number; color: string }) {
+// --- Cards Visualizer ---
+function CardsVisualizer({ yellow, red, align }: { yellow: number; red: number; align: 'left' | 'right' }) {
   return (
-    <div className="flex gap-[3px]">
-      {Array.from({ length: 4 }, (_, i) => (
-        <div key={i} className="w-[11px] h-4 rounded-[2px]"
-          style={{ background: i < count ? color : 'rgba(255,255,255,0.1)' }} />
-      ))}
+    <div className={`flex gap-2.5 ${align === 'right' ? 'flex-row-reverse' : ''} items-center`}>
+      {/* Yellow Cards */}
+      <div className="flex gap-1">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div
+            key={`yellow-${i}`}
+            className={`w-[12px] h-[18px] rounded-[3px] border transition-all duration-500 ${
+              i < yellow
+                ? 'bg-yellow-400 border-yellow-300 shadow-[0_0_8px_rgba(250,204,21,0.5)]'
+                : 'bg-white/5 border-white/10'
+            }`}
+          />
+        ))}
+      </div>
+      {/* Red Cards (currently mocked at 0 but supported in layout) */}
+      <div className="flex gap-1">
+        {Array.from({ length: 1 }).map((_, i) => (
+          <div
+            key={`red-${i}`}
+            className={`w-[12px] h-[18px] rounded-[3px] border transition-all duration-500 ${
+              i < red
+                ? 'bg-red-500 border-red-400 shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse'
+                : 'bg-white/5 border-white/10'
+            }`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-// --- Leaderboard avatar cell ---
+// --- Leaderboard Avatar Cell ---
 function Avatar({ player, size = 32 }: { player: { avatar: string; username: string }; size?: number }) {
   const cfg = getAvatarConfig(player.avatar);
   return (
@@ -106,30 +157,38 @@ function Avatar({ player, size = 32 }: { player: { avatar: string; username: str
 export default function BroadcastScreen() {
   const { match, leaderboard, teamLogos } = useGameStore();
   const [qrUrl, setQrUrl] = useState('');
-  const [tickerEvents, setTickerEvents] = useState<{ id: string; type: string; title: string; subtitle: string }[]>([]);
+  const [tickerEvents, setTickerEvents] = useState<{ id: string; type: string; title: string; subtitle: string; timestamp?: number }[]>([]);
   const [secs, setSecs] = useState(0);
-  // Classement affiché : par défaut « soirée » (ce match) ; bascule sur « compétition » (cumul CdM)
-  // ~1 min toutes les 15 min.
-  const [boardMode, setBoardMode] = useState<'soiree' | 'competition'>('soiree');
+  const [localTime, setLocalTime] = useState('');
 
+  // Tab rotation between soirée (ce match) and compétition (cumul CdM)
+  const [boardMode, setBoardMode] = useState<'soiree' | 'competition'>('soiree');
+  const ROTATION_TIME = 20; // rotation delay in seconds
+  const [timeLeft, setTimeLeft] = useState(ROTATION_TIME);
+
+  // Rotation trigger & progress
   useEffect(() => {
-    const SHOW_EVERY = 15 * 60 * 1000; // toutes les 15 min
-    const DURATION = 60 * 1000;        // affiché 1 min
-    const id = setInterval(() => {
-      setBoardMode('competition');
-      setTimeout(() => setBoardMode('soiree'), DURATION);
-    }, SHOW_EVERY);
-    return () => clearInterval(id);
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          setBoardMode((curr) => (curr === 'soiree' ? 'competition' : 'soiree'));
+          return ROTATION_TIME;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  // Sync poll
+  // Sync poll — pilote tout le déroulé automatique (coup d'envoi → mi-temps → 2e période → fin).
+  // Tourne dès qu'un match est actif et non terminé (y compris « avant-match »).
   useEffect(() => {
-    if (match.status !== 'live' && match.status !== 'half_time') return;
+    if (!match.id || match.status === 'finished') return;
     const id = setInterval(() => fetch('/api/admin/sync').catch(() => {}), 15000);
     return () => clearInterval(id);
-  }, [match.status]);
+  }, [match.id, match.status]);
 
-  // Ticker events
+  // Load ticker events
   useEffect(() => {
     const load = async () => {
       try {
@@ -142,15 +201,30 @@ export default function BroadcastScreen() {
     return () => clearInterval(id);
   }, []);
 
-  // QR code
+  // Current Local Time Clock
+  useEffect(() => {
+    const updateTime = () => {
+      const d = new Date();
+      setLocalTime(
+        d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
+    };
+    updateTime();
+    const id = setInterval(updateTime, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // QR Code generation
   useEffect(() => {
     if (typeof window === 'undefined') return;
     QRCode.toDataURL(`${window.location.origin}/join`, {
-      margin: 1, width: 200, color: { dark: '#040810', light: '#ffffff' },
+      margin: 1, 
+      width: 200, 
+      color: { dark: '#0A0A1E', light: '#ffffff' },
     }).then(setQrUrl).catch(() => {});
   }, []);
 
-  // Client-side seconds ticker — restarts (and resets to 0) whenever elapsedTime or status changes
+  // Client-side seconds ticker
   useEffect(() => {
     if (match.status !== 'live') return;
     let count = -1;
@@ -177,40 +251,40 @@ export default function BroadcastScreen() {
     isGeneral ? p.tournamentTotal + p.toilesCoins : p.toilesCoins;
 
   const possHome = match.possessionHome ?? 50;
-  const possAway = 100 - possHome;
 
   const timerDisplay = match.status === 'live'
     ? `${String(match.elapsedTime).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-    : match.status === 'half_time' ? 'HT'
-    : match.status === 'finished' ? 'FT'
+    : match.status === 'half_time' ? 'MI-TEMPS'
+    : match.status === 'finished' ? 'TERMINÉ'
     : '--:--';
 
   const statusBadge = match.status === 'live'
-    ? { label: 'LIVE', bg: 'rgba(255,30,30,0.18)', border: 'rgba(255,30,30,0.5)', color: '#FF3B3B' }
+    ? { label: 'DIRECT', bg: 'rgba(255,80,0,0.14)', border: 'rgba(255,80,0,0.4)', color: '#FF5000' }
     : match.status === 'half_time'
-    ? { label: 'HALF TIME', bg: 'rgba(255,215,0,0.1)', border: 'rgba(255,215,0,0.35)', color: GOLD }
+    ? { label: 'PAUSE', bg: 'rgba(255,184,0,0.12)', border: 'rgba(255,184,0,0.4)', color: GOLD }
     : match.status === 'finished'
-    ? { label: 'FULL TIME', bg: 'rgba(125,164,255,0.1)', border: 'rgba(125,164,255,0.35)', color: '#7da4ff' }
-    : { label: 'UPCOMING', bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)' };
+    ? { label: 'MATCH TERMINÉ', bg: 'rgba(255,255,255,0.06)', border: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)' }
+    : { label: 'AVANT-MATCH', bg: 'rgba(123,97,255,0.06)', border: 'rgba(123,97,255,0.15)', color: 'rgba(123,97,255,0.6)' };
 
   return (
     <div
-      className="h-dvh w-screen overflow-hidden flex flex-col select-none"
-      style={{ background: '#050912', color: '#e8eef9', fontFamily: 'var(--font-hanken)' }}
+      className="h-dvh w-screen overflow-hidden flex flex-col select-none relative"
+      style={{ background: '#07071a', color: '#F0F0FF', fontFamily: 'var(--font-hanken)' }}
     >
-      {/* Layered stadium-inspired gradient backdrop */}
+      {/* Stadium splitting glowing gradients */}
       <div className="absolute inset-0 z-0 pointer-events-none" style={{
         background: `
-          radial-gradient(ellipse 100% 55% at 50% -5%, rgba(0,90,30,0.20) 0%, transparent 55%),
-          radial-gradient(ellipse 55% 50% at 0% 65%, rgba(255,107,0,0.09) 0%, transparent 55%),
-          radial-gradient(ellipse 55% 50% at 100% 65%, rgba(0,200,255,0.09) 0%, transparent 55%),
-          radial-gradient(ellipse 80% 60% at 50% 110%, rgba(43,91,255,0.07) 0%, transparent 55%),
-          linear-gradient(180deg, #060d18 0%, #020508 100%)
+          radial-gradient(ellipse 75% 55% at 50% -10%, rgba(123,97,255,0.16) 0%, transparent 60%),
+          radial-gradient(ellipse 45% 45% at 0% 50%, rgba(255,80,0,0.15) 0%, transparent 55%),
+          radial-gradient(ellipse 45% 45% at 100% 50%, rgba(26,143,255,0.15) 0%, transparent 55%),
+          radial-gradient(ellipse 70% 50% at 50% 115%, rgba(123,97,255,0.12) 0%, transparent 60%),
+          linear-gradient(180deg, #0a0a22 0%, #07071a 100%)
         `
       }} />
-      {/* Subtle scanline HUD overlay */}
-      <div className="absolute inset-0 z-0 pointer-events-none opacity-[0.025]" style={{
-        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,1) 2px, rgba(255,255,255,1) 3px)',
+
+      {/* Cyber HUD scanlines overlay */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-[0.02] scanline-effect" style={{
+        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, #ffffff 2px, #ffffff 3px)',
         backgroundSize: '100% 3px',
       }} />
 
@@ -218,407 +292,561 @@ export default function BroadcastScreen() {
           HEADER BAR
       ══════════════════════════════════════════ */}
       <header
-        className="relative z-10 flex items-center px-6 shrink-0"
-        style={{ height: 60, background: 'rgba(5,9,18,0.92)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+        className="relative z-10 flex items-center justify-between px-6 shrink-0"
+        style={{ height: 60, background: 'rgba(7,7,26,0.85)', borderBottom: '1px solid rgba(123,97,255,0.15)', backdropFilter: 'blur(10px)' }}
       >
-        {/* Left: status badge */}
-        <div className="flex items-center gap-3 w-1/4">
+        {/* Left: status badge & elapsed time */}
+        <div className="flex items-center gap-4 w-1/4">
           <div
-            className="flex items-center gap-2 px-4 py-1.5 rounded-full"
-            style={{ background: statusBadge.bg, border: `1px solid ${statusBadge.border}` }}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full border"
+            style={{ background: statusBadge.bg, borderColor: statusBadge.border }}
           >
             {match.status === 'live' && (
-              <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#FF3B3B', boxShadow: '0 0 8px #FF3B3B' }} />
+              <div className="w-2.5 h-2.5 rounded-full bg-home animate-pulse shadow-[0_0_8px_#FF5000]" />
             )}
-            <span style={{ fontFamily: 'var(--font-anybody)', fontSize: 12, fontWeight: 800, letterSpacing: '0.18em', color: statusBadge.color }}>
+            <span className="font-anybody text-xs font-bold tracking-[0.15em] select-none" style={{ color: statusBadge.color }}>
               {statusBadge.label}
             </span>
           </div>
           {match.status === 'live' && (
-            <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 12, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.05em' }}>
-              {match.elapsedTime}&apos;
+            <span className="font-jetbrains text-xs text-on-surface-variant/70 tracking-widest tabular select-none">
+              ⏱️ {match.elapsedTime}&apos;
             </span>
           )}
         </div>
 
         {/* Center: LTNBet logo */}
         <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center leading-none">
-          <div style={{ fontFamily: 'var(--font-anybody)', fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1 }}>
-            <span style={{ fontSize: 30, color: 'white', textShadow: '0 0 30px rgba(255,255,255,0.2)' }}>LTN</span>
-            <span style={{ fontSize: 30, color: ORANGE, textShadow: `0 0 30px rgba(255,107,0,0.6)` }}>Bet</span>
+          <div className="font-anybody font-black select-none tracking-tight leading-none">
+            <span className="text-2xl text-white text-glow-violet">LTN</span>
+            <span className="text-2xl text-home text-glow-home">Bet</span>
           </div>
-          <span style={{ fontFamily: 'var(--font-hanken)', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.28em', color: 'rgba(255,255,255,0.38)', marginTop: 1 }}>
+          <span className="font-hanken text-[8px] font-bold tracking-[0.35em] text-white/30 uppercase mt-0.5 select-none">
             LIVE STADIUM BROADCAST
           </span>
         </div>
 
-        {/* Right: venue */}
-        <div className="flex items-center justify-end gap-2 w-1/4">
-          <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'rgba(255,255,255,0.3)' }}>stadium</span>
-          <span style={{ fontFamily: 'var(--font-hanken)', fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Les Toiles Noires
-          </span>
+        {/* Right: local clock & venue */}
+        <div className="flex items-center justify-end gap-5 w-1/4 select-none">
+          <div className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[15px] text-white/30">schedule</span>
+            <span className="font-jetbrains text-xs text-white/60 tracking-wider tabular">{localTime}</span>
+          </div>
+          <div className="flex items-center gap-1.5 border-l border-white/10 pl-4">
+            <span className="material-symbols-outlined text-[15px] text-white/30">stadium</span>
+            <span className="font-hanken text-[10px] text-white/40 tracking-wider uppercase font-bold">
+              LES TOILES NOIRES
+            </span>
+          </div>
         </div>
       </header>
 
       {/* ══════════════════════════════════════════
           MAIN GRID — 3 columns
       ══════════════════════════════════════════ */}
-      <div className="relative z-10 flex-1 grid grid-cols-[280px_1fr_300px] gap-0 overflow-hidden min-h-0">
+      <main className="relative z-10 flex-1 grid grid-cols-[330px_1fr_340px] gap-6 p-6 min-h-0">
 
         {/* ── LEFT PANEL: Live Match Stats ── */}
-        <div
-          className="flex flex-col gap-0 overflow-hidden p-5"
-          style={{ borderRight: '1px solid rgba(255,255,255,0.06)', background: 'rgba(6,10,20,0.7)' }}
+        <section
+          className="flex flex-col gap-4 overflow-hidden p-5 rounded-2xl glass-panel relative"
         >
-          <h2 style={{
-            fontFamily: 'var(--font-anybody)', fontSize: 12, fontWeight: 800, letterSpacing: '0.22em',
-            color: 'rgba(255,255,255,0.5)', marginBottom: 16, textTransform: 'uppercase',
-          }}>
-            Live Match Stats
+          <div className="absolute -top-12 -left-12 w-36 h-36 rounded-full pointer-events-none blur-3xl"
+            style={{ background: 'rgba(255,80,0,0.08)' }} />
+
+          <h2 className="font-label-caps text-xs text-white/60 tracking-widest flex items-center gap-2 border-b border-white/5 pb-2 select-none">
+            <span className="material-symbols-outlined text-[16px] text-home">analytics</span>
+            STATISTIQUES LIVE
           </h2>
 
-          {/* Possession donut */}
-          <div className="flex flex-col items-center gap-3 mb-5">
-            <div className="relative">
-              <PossessionDonut home={possHome} />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span style={{ fontFamily: 'var(--font-anywhere)', fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>POSS</span>
-              </div>
-            </div>
-            <div style={{ fontSize: 11, fontFamily: 'var(--font-hanken)', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.55)' }}>
-              POSSESSION
-            </div>
-            <div className="flex gap-6">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-[2px]" style={{ background: ORANGE }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: ORANGE }}>Home {possHome}%</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-[2px]" style={{ background: CYAN }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: CYAN }}>Away {possAway}%</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Shots on target */}
-          <div className="mb-5">
-            <div className="flex justify-between mb-2" style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>
-              <span style={{ color: ORANGE }}>Home {match.shotsOnTargetHome}</span>
-              <span>SHOTS ON TARGET</span>
-              <span style={{ color: CYAN }}>Away {match.shotsOnTargetAway}</span>
-            </div>
-            <ShotBars home={match.shotsOnTargetHome} away={match.shotsOnTargetAway} />
-          </div>
-
-          {/* Cards */}
-          <div className="mb-5">
-            <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'rgba(255,255,255,0.4)', marginBottom: 8, textTransform: 'uppercase' }}>
-              Cards:&nbsp;
-              <span style={{ color: ORANGE }}>Home Y-{match.cardsHome} R-0</span>
-              &nbsp;|&nbsp;
-              <span style={{ color: CYAN }}>Away Y-{match.cardsAway} R-0</span>
-            </div>
-            <div className="flex justify-between items-start">
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', width: 12 }}>Y</span>
-                  <CardSlots count={Math.min(match.cardsHome, 4)} color="#FFD700" />
+          {/* Possession ring */}
+          <div className="flex flex-col items-center gap-4 py-2 border-b border-white/5 relative">
+            <div className="relative flex items-center justify-center w-full">
+              <div className="flex items-center justify-between w-full px-4">
+                <div className="flex flex-col items-start select-none">
+                  <span className="font-anybody text-3xl font-black text-home">{possHome}%</span>
+                  <span className="font-hanken text-[9px] text-white/40 font-bold uppercase tracking-wider">DOMICILE</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', width: 12 }}>R</span>
-                  <CardSlots count={0} color="#FF3B3B" />
+                <div className="relative shrink-0 select-none">
+                  <PossessionDonut home={possHome} />
+                  <div className="absolute inset-0 flex items-center justify-center flex-col">
+                    <span className="material-symbols-outlined text-[20px] text-white/20">sports_soccer</span>
+                  </div>
                 </div>
-              </div>
-              <div className="flex flex-col gap-1.5 items-end">
-                <div className="flex items-center gap-2 flex-row-reverse">
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', width: 12, textAlign: 'right' }}>Y</span>
-                  <CardSlots count={Math.min(match.cardsAway, 4)} color="#FFD700" />
-                </div>
-                <div className="flex items-center gap-2 flex-row-reverse">
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', width: 12, textAlign: 'right' }}>R</span>
-                  <CardSlots count={0} color="#FF3B3B" />
+                <div className="flex flex-col items-end select-none">
+                  <span className="font-anybody text-3xl font-black text-away">{100 - possHome}%</span>
+                  <span className="font-hanken text-[9px] text-white/40 font-bold uppercase tracking-wider">EXTÉRIEUR</span>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Pass Accuracy + Corner Kicks */}
-          <div className="grid grid-cols-2 gap-2.5 mt-auto">
-            <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ fontSize: 8.5, letterSpacing: '0.14em', fontWeight: 700, color: 'rgba(255,255,255,0.35)', marginBottom: 5, textTransform: 'uppercase' }}>
-                Pass Accuracy
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>
-                <span style={{ color: ORANGE }}>{match.passesAccuracyHome}%</span>
-                <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 3px' }}>|</span>
-                <span style={{ color: CYAN }}>{match.passesAccuracyAway}%</span>
-              </div>
-            </div>
-            <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ fontSize: 8.5, letterSpacing: '0.14em', fontWeight: 700, color: 'rgba(255,255,255,0.35)', marginBottom: 5, textTransform: 'uppercase' }}>
-                Corner Kicks
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>
-                <span style={{ color: ORANGE }}>{match.cornersHome}</span>
-                <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 3px' }}>|</span>
-                <span style={{ color: CYAN }}>{match.cornersAway}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── CENTER PANEL: Score + Timer ── */}
-        <div className="flex flex-col items-center justify-center gap-4 px-8 relative overflow-hidden">
-          {/* Background orange/cyan glow orbs */}
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-48 h-48 rounded-full pointer-events-none"
-            style={{ background: `radial-gradient(circle, rgba(255,107,0,0.12) 0%, transparent 70%)`, filter: 'blur(20px)' }} />
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-48 h-48 rounded-full pointer-events-none"
-            style={{ background: `radial-gradient(circle, rgba(0,200,255,0.12) 0%, transparent 70%)`, filter: 'blur(20px)' }} />
-
-          {/* Timer */}
-          <div
-            style={{
-              fontFamily: 'var(--font-anybody)', fontSize: 72, fontWeight: 900, lineHeight: 1,
-              color: 'white', letterSpacing: '0.04em',
-              textShadow: '0 0 60px rgba(255,255,255,0.15)',
-            }}
-          >
-            {timerDisplay}
-          </div>
-
-          {/* Teams + Score row */}
-          <div className="flex items-center w-full justify-center gap-6">
-
-            {/* Home team */}
-            <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
-              <div
-                className="w-24 h-24 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
-                style={{
-                  background: 'rgba(255,107,0,0.12)',
-                  border: `2.5px solid ${ORANGE}`,
-                  boxShadow: `0 0 35px rgba(255,107,0,0.35), inset 0 0 20px rgba(255,107,0,0.08)`,
-                  fontSize: 52,
-                }}
-              >
-                <TeamFlag team={match.homeTeam} logoUrl={logoForTeam(match.homeTeam, teamLogos)} className="w-full h-full object-cover" />
-              </div>
-              <span style={{
-                fontFamily: 'var(--font-anybody)', fontSize: 20, fontWeight: 800, textTransform: 'uppercase',
-                letterSpacing: '0.05em', textAlign: 'center', lineHeight: 1.1,
-                color: 'white', textShadow: `0 0 20px rgba(255,107,0,0.3)`,
-                wordBreak: 'break-word',
-              }}>
-                {match.homeTeam || 'HOME TEAM'}
-              </span>
-            </div>
-
-            {/* Score */}
-            <div className="flex items-center gap-3 shrink-0">
-              <span style={{
-                fontFamily: 'var(--font-anybody)', fontSize: 96, fontWeight: 900, lineHeight: 1,
-                color: ORANGE, textShadow: `0 0 50px rgba(255,107,0,0.6)`,
-              }}>
-                {match.homeScore}
-              </span>
-              <span style={{
-                fontFamily: 'var(--font-anybody)', fontSize: 52, fontWeight: 300,
-                color: 'rgba(255,255,255,0.18)',
-              }}>
-                -
-              </span>
-              <span style={{
-                fontFamily: 'var(--font-anybody)', fontSize: 96, fontWeight: 900, lineHeight: 1,
-                color: 'white', textShadow: `0 0 50px rgba(0,200,255,0.35)`,
-              }}>
-                {match.awayScore}
-              </span>
-            </div>
-
-            {/* Away team */}
-            <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
-              <div
-                className="w-24 h-24 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
-                style={{
-                  background: 'rgba(0,200,255,0.12)',
-                  border: `2.5px solid ${CYAN}`,
-                  boxShadow: `0 0 35px rgba(0,200,255,0.35), inset 0 0 20px rgba(0,200,255,0.08)`,
-                  fontSize: 52,
-                }}
-              >
-                <TeamFlag team={match.awayTeam} logoUrl={logoForTeam(match.awayTeam, teamLogos)} className="w-full h-full object-cover" />
-              </div>
-              <span style={{
-                fontFamily: 'var(--font-anybody)', fontSize: 20, fontWeight: 800, textTransform: 'uppercase',
-                letterSpacing: '0.05em', textAlign: 'center', lineHeight: 1.1,
-                color: CYAN, textShadow: `0 0 20px rgba(0,200,255,0.4)`,
-                wordBreak: 'break-word',
-              }}>
-                {match.awayTeam || 'AWAY TEAM'}
-              </span>
+            <div className="font-hanken text-[10px] tracking-widest text-white/40 uppercase font-bold select-none">
+              POSSESSION DE BALLE
             </div>
           </div>
 
-          {/* Match info stripe */}
-          <div
-            className="px-8 py-2 rounded-full flex items-center gap-3 mt-2"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'rgba(255,255,255,0.3)' }}>sports_soccer</span>
-            <span style={{ fontFamily: 'var(--font-hanken)', fontSize: 11, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
-              LTN BET LIVE
-            </span>
-            <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
-            <span style={{ fontFamily: 'var(--font-hanken)', fontSize: 11, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
-              LES TOILES NOIRES
-            </span>
-          </div>
-        </div>
+          {/* Core Stats Lists */}
+          <div className="flex-1 flex flex-col gap-4 justify-around py-1">
+            <StatCompareBar label="TIRS CADRÉS" homeVal={match.shotsOnTargetHome} awayVal={match.shotsOnTargetAway} />
+            <StatCompareBar label="TIRS TOTAL" homeVal={match.shotsHome} awayVal={match.shotsAway} />
+            <StatCompareBar label="CORNER KICKS" homeVal={match.cornersHome} awayVal={match.cornersAway} />
+            <StatCompareBar label="FAUTES COMMISES" homeVal={match.foulsHome} awayVal={match.foulsAway} />
 
-        {/* ── RIGHT PANEL: Leaderboard ── */}
-        <div
-          className="flex flex-col overflow-hidden"
-          style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', background: 'rgba(6,10,20,0.7)' }}
-        >
-          {/* Header */}
-          <div className="px-5 pt-5 pb-4 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-            <h2 style={{ fontFamily: 'var(--font-anybody)', fontSize: 16, fontWeight: 800, color: isGeneral ? GOLD : 'white', letterSpacing: '0.08em', lineHeight: 1, transition: 'color 0.4s' }}>
-              {isGeneral ? 'CLASSEMENT GÉNÉRAL' : 'CLASSEMENT SOIRÉE'}
-            </h2>
-            <p style={{ fontSize: 10, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.38)', marginTop: 3, fontWeight: 700 }}>
-              {isGeneral ? 'CUMUL COUPE DU MONDE' : 'TOP 10 · CE MATCH'}
-            </p>
+            {/* Pass Accuracy */}
+            <div className="flex flex-col gap-1 w-full">
+              <div className="flex justify-between items-center text-xs px-1 select-none">
+                <span className="font-jetbrains font-bold text-home">{match.passesAccuracyHome}%</span>
+                <span className="font-hanken font-bold text-on-surface-variant/75 text-[10px] tracking-wider uppercase">PRÉCISION PASSES</span>
+                <span className="font-jetbrains font-bold text-away">{match.passesAccuracyAway}%</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-white/5 flex overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-home/40 to-home transition-all duration-700 ease-out rounded-l-full" style={{ width: `${match.passesAccuracyHome / 2}%` }} />
+                <div className="w-0.5 h-full bg-white/10 shrink-0" />
+                <div className="h-full bg-gradient-to-l from-away/40 to-away transition-all duration-700 ease-out rounded-r-full ml-auto" style={{ width: `${match.passesAccuracyAway / 2}%` }} />
+              </div>
+            </div>
           </div>
 
-          {/* Podium — Top 3 */}
-          <div className="px-4 py-3 flex flex-col gap-2 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            {top10.slice(0, 3).map((player, i) => (
-              <div
-                key={player.id}
-                className="flex items-center gap-2.5 rounded-xl px-3 py-2"
-                style={{
-                  background: i === 0 ? 'rgba(255,215,0,0.07)' : 'rgba(255,255,255,0.025)',
-                  border: `1px solid ${i === 0 ? 'rgba(255,215,0,0.22)' : i === 1 ? 'rgba(192,192,192,0.15)' : 'rgba(205,127,50,0.15)'}`,
-                  boxShadow: i === 0 ? MEDAL_GLOWS[0] : 'none',
-                }}
-              >
-                {/* Medal circle */}
+          {/* Cards Visualizer row */}
+          <div className="flex justify-between items-center py-2 border-t border-white/5 mt-auto select-none">
+            <div className="flex flex-col gap-1.5 items-start">
+              <span className="font-hanken text-[9px] text-white/40 font-bold uppercase tracking-wider">Cartons Dom.</span>
+              <CardsVisualizer yellow={match.cardsHome} red={0} align="left" />
+            </div>
+            <span className="material-symbols-outlined text-[18px] text-white/20">style</span>
+            <div className="flex flex-col gap-1.5 items-end">
+              <span className="font-hanken text-[9px] text-white/40 font-bold uppercase tracking-wider">Cartons Ext.</span>
+              <CardsVisualizer yellow={match.cardsAway} red={0} align="right" />
+            </div>
+          </div>
+        </section>
+
+        {/* ── CENTER PANEL: Scoreboard + Events Feed + QR ── */}
+        <section className="flex flex-col gap-6 overflow-hidden min-h-0">
+          
+          {/* Main Scoreboard Widget */}
+          <div className="glass-panel p-6 rounded-2xl flex flex-col items-center relative overflow-hidden shrink-0">
+            {/* Glowing background highlights */}
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-40 h-40 rounded-full pointer-events-none blur-3xl"
+              style={{ background: `radial-gradient(circle, rgba(255,80,0,0.07) 0%, transparent 70%)` }} />
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-40 h-40 rounded-full pointer-events-none blur-3xl"
+              style={{ background: `radial-gradient(circle, rgba(26,143,255,0.07) 0%, transparent 70%)` }} />
+
+            <div className="font-anybody text-6xl font-black text-white tracking-[0.05em] select-none text-shadow-violet leading-none mb-4">
+              {timerDisplay}
+            </div>
+
+            {/* Flag - Score - Flag Row */}
+            <div className="flex items-center w-full justify-center gap-6 relative select-none">
+              
+              {/* Home Team */}
+              <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
                 <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 font-black"
-                  style={{
-                    background: MEDAL_COLORS[i],
-                    color: '#000',
-                    fontSize: 13,
-                    boxShadow: MEDAL_GLOWS[i],
-                    fontFamily: 'var(--font-anybody)',
-                  }}
+                  className="w-22 h-22 rounded-full flex items-center justify-center shrink-0 overflow-hidden border-2 bg-gradient-to-br from-home/15 to-transparent shadow-[0_0_25px_rgba(255,80,0,0.25)]"
+                  style={{ borderColor: ORANGE }}
                 >
-                  {i + 1}
+                  <TeamFlag team={match.homeTeam} logoUrl={logoForTeam(match.homeTeam, teamLogos)} className="w-full h-full object-cover" />
                 </div>
-                <Avatar player={player} size={28} />
-                <span className="flex-1 font-bold truncate" style={{ fontSize: 13 }}>{player.username}</span>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 12, fontWeight: 700, color: MEDAL_COLORS[i], flexShrink: 0 }}>
-                  {boardScore(player).toLocaleString()} pts
+                <span className="font-anybody text-lg font-black text-white text-center tracking-wider truncate w-full">
+                  {match.homeTeam || 'DOMICILE'}
                 </span>
               </div>
-            ))}
+
+              {/* Huge Live Score digits */}
+              <div className="flex items-center gap-4 shrink-0 px-2">
+                <span className="font-anybody text-7xl font-black leading-none text-glow-home text-home">
+                  {match.homeScore}
+                </span>
+                <span className="font-anybody text-3xl font-light text-white/20 select-none">-</span>
+                <span className="font-anybody text-7xl font-black leading-none text-glow-blue text-away">
+                  {match.awayScore}
+                </span>
+              </div>
+
+              {/* Away Team */}
+              <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
+                <div
+                  className="w-22 h-22 rounded-full flex items-center justify-center shrink-0 overflow-hidden border-2 bg-gradient-to-br from-away/15 to-transparent shadow-[0_0_25px_rgba(26,143,255,0.25)]"
+                  style={{ borderColor: CYAN }}
+                >
+                  <TeamFlag team={match.awayTeam} logoUrl={logoForTeam(match.awayTeam, teamLogos)} className="w-full h-full object-cover" />
+                </div>
+                <span className="font-anybody text-lg font-black text-away text-center tracking-wider truncate w-full">
+                  {match.awayTeam || 'EXTÉRIEUR'}
+                </span>
+              </div>
+
+            </div>
+
+            {/* Live scorer lists — liste exacte tenue à jour depuis l'API (nom + minute) */}
+            {match.scorers.length > 0 && (
+              <div className="w-full max-w-lg mt-5 grid grid-cols-2 gap-4 text-xs font-data-mono text-white/50 border-t border-white/5 pt-3 select-none">
+                {/* Home scorers */}
+                <div className="text-right space-y-1 pr-3 border-r border-white/5">
+                  {match.scorers
+                    .filter(s => s.team === 'home')
+                    .map((s, i) => (
+                      <div key={`h-${i}-${s.playerName}-${s.minute}`} className="flex items-center justify-end gap-1.5">
+                        <span className="text-[10px] text-white/30 font-jetbrains">⏱️ {s.minute || 0}&apos;</span>
+                        <span className="font-bold text-white/80">{s.playerName}</span>
+                        <span className="material-symbols-outlined text-[13px] text-home select-none">sports_soccer</span>
+                      </div>
+                    ))}
+                </div>
+                {/* Away scorers */}
+                <div className="text-left space-y-1 pl-3">
+                  {match.scorers
+                    .filter(s => s.team === 'away')
+                    .map((s, i) => (
+                      <div key={`a-${i}-${s.playerName}-${s.minute}`} className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[13px] text-away select-none">sports_soccer</span>
+                        <span className="font-bold text-white/80">{s.playerName}</span>
+                        <span className="text-[10px] text-white/30 font-jetbrains">⏱️ {s.minute || 0}&apos;</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Ranked list — 4 to 10 */}
-          <div className="flex-1 overflow-hidden px-3 py-3 flex flex-col gap-1.5">
-            {top10.slice(3).map((player, i) => (
-              <div key={player.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 11, color: 'rgba(255,255,255,0.35)', width: 18, textAlign: 'right', flexShrink: 0 }}>
-                  {i + 4}.
-                </span>
-                <Avatar player={player} size={24} />
-                <span className="flex-1 truncate" style={{ fontSize: 13, fontWeight: 600 }}>{player.username}</span>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 12, fontWeight: 700, color: '#7da4ff', flexShrink: 0 }}>
-                  {boardScore(player).toLocaleString()} pts
-                </span>
-              </div>
-            ))}
+          {/* Live Events Feed Log */}
+          <div className="flex-1 w-full bg-[#0a0a24]/30 border border-white/5 rounded-2xl p-4 overflow-hidden flex flex-col gap-3 relative min-h-0">
+            <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 w-48 h-48 rounded-full pointer-events-none blur-3xl"
+              style={{ background: 'rgba(123,97,255,0.05)' }} />
+
+            <div className="font-label-caps text-[10px] text-white/40 tracking-wider flex items-center gap-2 border-b border-white/5 pb-2 shrink-0 select-none">
+              <span className="material-symbols-outlined text-[14px] text-primary">feed</span>
+              JOURNAL D&apos;ÉVÉNEMENTS EN DIRECT
+            </div>
+            
+            <div className="flex-1 overflow-y-auto flex flex-col gap-2.5 pr-1.5 custom-scrollbar">
+              <AnimatePresence initial={false}>
+                {tickerEvents.slice(0, 5).map((evt) => {
+                  let icon = 'info';
+                  let iconColor = 'text-white/60';
+                  let bgColor = 'bg-white/5';
+                  let borderGlow = 'border-white/10';
+
+                  if (evt.type === 'goal') {
+                    icon = 'sports_soccer';
+                    iconColor = 'text-home';
+                    bgColor = 'bg-home/10';
+                    borderGlow = 'border-home/20 shadow-[0_0_10px_rgba(255,80,0,0.15)]';
+                  } else if (evt.type === 'leader_change') {
+                    icon = 'military_tech';
+                    iconColor = 'text-tertiary';
+                    bgColor = 'bg-tertiary/10';
+                    borderGlow = 'border-tertiary/20 shadow-[0_0_10px_rgba(255,184,0,0.15)]';
+                  } else if (evt.type === 'jackpot') {
+                    icon = 'workspace_premium';
+                    iconColor = 'text-tertiary';
+                    bgColor = 'bg-tertiary/15 animate-pulse';
+                    borderGlow = 'border-tertiary/30 shadow-[0_0_15px_rgba(255,184,0,0.25)]';
+                  } else if (evt.type === 'flash_market') {
+                    icon = 'bolt';
+                    iconColor = 'text-primary';
+                    bgColor = 'bg-primary/10';
+                    borderGlow = 'border-primary/20 shadow-[0_0_10px_rgba(123,97,255,0.15)]';
+                  } else if (evt.type === 'finished') {
+                    icon = 'sports_score';
+                    iconColor = 'text-white';
+                    bgColor = 'bg-white/10';
+                    borderGlow = 'border-white/25';
+                  }
+
+                  return (
+                    <motion.div
+                      key={evt.id}
+                      initial={{ opacity: 0, x: -15, y: -5 }}
+                      animate={{ opacity: 1, x: 0, y: 0 }}
+                      exit={{ opacity: 0, x: 15 }}
+                      transition={{ duration: 0.35, ease: 'easeOut' }}
+                      className={`flex items-center gap-3.5 p-3 rounded-xl border ${bgColor} ${borderGlow}`}
+                    >
+                      <div className="w-8.5 h-8.5 rounded-lg flex items-center justify-center shrink-0 bg-black/40 border border-white/5 select-none">
+                        <span className={`material-symbols-outlined text-[18px] ${iconColor}`} style={{ fontVariationSettings: "'FILL' 1" }}>
+                          {icon}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white text-xs font-bold truncate leading-snug">{evt.title}</div>
+                        <div className="text-white/60 text-[11px] truncate leading-normal mt-0.5">{evt.subtitle}</div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+
+              {tickerEvents.length === 0 && (
+                <div className="flex-grow flex flex-col items-center justify-center text-center text-white/20 py-12 gap-2 select-none">
+                  <span className="material-symbols-outlined text-[32px] opacity-30">sensors</span>
+                  <span className="text-xs">En attente d&apos;actions de match...</span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
+
+          {/* Interactive QR Code scan panel */}
+          <div className="glass-panel p-4 rounded-2xl flex items-center justify-between gap-5 relative overflow-hidden shrink-0">
+            <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full pointer-events-none blur-3xl"
+              style={{ background: 'rgba(123,97,255,0.06)' }} />
+            
+            <div className="flex items-center gap-4 select-none">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                <span className="material-symbols-outlined text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>qr_code_scanner</span>
+              </div>
+              <div>
+                <h3 className="text-white text-xs font-black uppercase tracking-wider leading-none">REJOINDRE LA PARTIE</h3>
+                <p className="text-white/45 text-[10px] tracking-wide mt-1 leading-snug max-w-[210px]">
+                  Scannez le QR Code pour vous connecter, placer vos pronostics en direct et remporter des boissons gratuites !
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="h-6 w-[1px] bg-white/10" />
+              <div className="bg-white p-1 rounded-xl shadow-[0_0_15px_rgba(255,255,255,0.15)] flex items-center justify-center shrink-0">
+                {qrUrl ? (
+                  <img src={qrUrl} alt="QR Code" className="w-13 h-13 block" />
+                ) : (
+                  <div className="animate-pulse w-13 h-13 bg-white/10 rounded-lg" />
+                )}
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        {/* ── RIGHT PANEL: Tipsters Rankings Podium & List ── */}
+        <section
+          className="flex flex-col overflow-hidden rounded-2xl glass-panel relative"
+        >
+          <div className="absolute -top-12 -right-12 w-36 h-36 rounded-full pointer-events-none blur-3xl"
+            style={{ background: 'rgba(255,184,0,0.08)' }} />
+
+          {/* Section Header */}
+          <div className="px-5 pt-5 pb-3 shrink-0 flex items-center justify-between border-b border-white/5 select-none">
+            <div className="flex flex-col">
+              <div className="font-anybody text-sm font-black tracking-wider text-white">
+                {isGeneral ? 'CLASSEMENT GÉNÉRAL' : 'CLASSEMENT SOIRÉE'}
+              </div>
+              <span className="font-hanken text-[9px] text-white/40 tracking-wider uppercase font-extrabold mt-0.5">
+                {isGeneral ? 'CUMUL COUPE DU MONDE' : 'TOP 10 · CE MATCH'}
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-1.5 bg-[#0a0a24]/50 border border-white/5 px-2.5 py-1.5 rounded-full shrink-0">
+              <span className="material-symbols-outlined text-[12px] text-tertiary animate-pulse" style={{ fontVariationSettings: "'FILL' 1" }}>
+                workspace_premium
+              </span>
+              <span className="font-jetbrains text-[10px] text-tertiary font-bold tabular">
+                {timeLeft}s
+              </span>
+            </div>
+          </div>
+
+          {/* Podium - Top 3 */}
+          <div className="px-4 py-3 flex items-end justify-center gap-1 select-none h-44 pb-1 shrink-0 border-b border-white/5 bg-[#0a0a24]/10">
+            {/* 2nd place */}
+            {top10[1] && (
+              <div className="flex flex-col items-center flex-1 min-w-0">
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-full bg-[#C0C0C0]/10 blur-md" />
+                  <div className="relative w-13 h-13 rounded-full border border-[#C0C0C0]/40 p-0.5 overflow-hidden bg-surface-container shadow-[0_0_12px_rgba(192,192,192,0.15)]">
+                    <Avatar player={top10[1]} size={46} />
+                  </div>
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#C0C0C0] text-[#07071a] font-anybody font-black text-[10px] w-4.5 h-4.5 rounded-full flex items-center justify-center border border-[#07071a]">
+                    2
+                  </div>
+                </div>
+                <span className="font-hanken font-bold text-[11px] truncate w-full text-center mt-2 text-white/90">
+                  {top10[1].username}
+                </span>
+                <span className="font-jetbrains font-bold text-[10px] text-[#C0C0C0] mt-0.5">
+                  {boardScore(top10[1]).toLocaleString()}
+                </span>
+                {/* Stand Column */}
+                <div className="w-full h-8 mt-1.5 rounded-t-lg bg-gradient-to-b from-white/10 to-transparent border-t border-white/10" />
+              </div>
+            )}
+
+            {/* 1st place */}
+            {top10[0] && (
+              <div className="flex flex-col items-center flex-1 min-w-0 z-10">
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-full bg-tertiary/20 blur-lg animate-pulse" />
+                  {/* Miniature Floating Crown */}
+                  <span className="absolute -top-4.5 left-1/2 -translate-x-1/2 material-symbols-outlined text-tertiary text-[18px] drop-shadow-[0_0_6px_rgba(255,184,0,0.5)] animate-bounce select-none" style={{ fontVariationSettings: "'FILL' 1" }}>
+                    crown
+                  </span>
+                  <div className="relative w-16 h-16 rounded-full border-2 border-tertiary p-0.5 overflow-hidden bg-surface-container-high shadow-[0_0_18px_rgba(255,184,0,0.25)]">
+                    <Avatar player={top10[0]} size={58} />
+                  </div>
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-tertiary text-[#07071a] font-anybody font-black text-xs w-5 h-5 rounded-full flex items-center justify-center border border-[#07071a]">
+                    1
+                  </div>
+                </div>
+                <span className="font-hanken font-black text-xs truncate w-full text-center mt-2 text-tertiary">
+                  {top10[0].username}
+                </span>
+                <span className="font-jetbrains font-black text-[11px] text-white mt-0.5">
+                  {boardScore(top10[0]).toLocaleString()}
+                </span>
+                {/* Stand Column */}
+                <div className="w-full h-13 mt-1.5 rounded-t-lg bg-gradient-to-b from-tertiary/20 to-transparent border-t-2 border-tertiary/30" />
+              </div>
+            )}
+
+            {/* 3rd place */}
+            {top10[2] && (
+              <div className="flex flex-col items-center flex-1 min-w-0">
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-full bg-[#CD7F32]/5 blur-sm" />
+                  <div className="relative w-11 h-11 rounded-full border border-[#CD7F32]/40 p-0.5 overflow-hidden bg-surface-container">
+                    <Avatar player={top10[2]} size={38} />
+                  </div>
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#CD7F32] text-[#07071a] font-anybody font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center border border-[#07071a]">
+                    3
+                  </div>
+                </div>
+                <span className="font-hanken font-bold text-[11px] truncate w-full text-center mt-2 text-white/80">
+                  {top10[2].username}
+                </span>
+                <span className="font-jetbrains font-bold text-[10px] text-[#CD7F32] mt-0.5">
+                  {boardScore(top10[2]).toLocaleString()}
+                </span>
+                {/* Stand Column */}
+                <div className="w-full h-5 mt-1.5 rounded-t-lg bg-gradient-to-b from-white/5 to-transparent border-t border-white/5" />
+              </div>
+            )}
+          </div>
+
+          {/* List 4-10 */}
+          <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-2 min-h-0 custom-scrollbar select-none">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={boardMode}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.35 }}
+                className="flex flex-col gap-2 w-full"
+              >
+                {top10.slice(3).map((player, idx) => {
+                  const rank = idx + 4;
+                  return (
+                    <div 
+                      key={player.id} 
+                      className="flex items-center gap-3.5 px-3 py-2 rounded-xl border border-white/[0.03] bg-white/[0.01] hover:bg-white/[0.03] transition-all"
+                    >
+                      <span className="font-jetbrains text-xs font-bold text-white/30 w-5 text-right shrink-0">
+                        {rank}.
+                      </span>
+                      <Avatar player={player} size={24} />
+                      <span className="flex-1 truncate font-hanken text-xs font-bold text-white/85">
+                        {player.username}
+                      </span>
+                      
+                      {/* Rank shift indicator */}
+                      <div className="flex items-center w-5 justify-center shrink-0">
+                        {player.rankChange === 'up' && (
+                          <span className="material-symbols-outlined text-[#10B981] text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                            arrow_drop_up
+                          </span>
+                        )}
+                        {player.rankChange === 'down' && (
+                          <span className="material-symbols-outlined text-[#EF4444] text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                            arrow_drop_down
+                          </span>
+                        )}
+                        {player.rankChange === 'same' && (
+                          <span className="text-white/20 text-xs font-bold leading-none select-none">•</span>
+                        )}
+                      </div>
+
+                      <span className="font-jetbrains text-xs font-black text-[#7da4ff] w-16 text-right shrink-0">
+                        {boardScore(player).toLocaleString()} pts
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {top10.length <= 3 && (
+                  <div className="text-center text-white/20 text-xs py-8">
+                    En attente de participants pour le classement...
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Time rotation loading bar */}
+          <div className="h-1 w-full bg-white/5 mt-auto relative shrink-0">
+            <div 
+              className="h-full bg-gradient-to-r from-primary via-tertiary to-primary transition-all duration-1000 linear"
+              style={{ width: `${(timeLeft / ROTATION_TIME) * 100}%` }}
+            />
+          </div>
+        </section>
+
+      </main>
 
       {/* ══════════════════════════════════════════
-          BOTTOM: TICKER + QR CODE
+          BOTTOM: TICKER
       ══════════════════════════════════════════ */}
       <div
-        className="relative z-10 flex shrink-0 overflow-hidden"
-        style={{ height: 68, background: 'rgba(4,8,16,0.97)', borderTop: '1px solid rgba(255,255,255,0.07)' }}
+        className="relative z-10 flex shrink-0 overflow-hidden select-none"
+        style={{ height: 68, background: 'rgba(7,7,26,0.95)', borderTop: '1px solid rgba(123,97,255,0.15)' }}
       >
-        {/* Breaking News label */}
+        {/* News label */}
         <div
-          className="flex items-center px-5 shrink-0"
-          style={{ background: 'rgba(255,107,0,0.14)', borderRight: `2px solid ${ORANGE}` }}
+          className="flex items-center px-6 shrink-0 relative overflow-hidden"
+          style={{ background: 'rgba(255,80,0,0.12)', borderRight: `2px solid ${ORANGE}` }}
         >
-          <span style={{
-            fontFamily: 'var(--font-anybody)', fontSize: 11, fontWeight: 900,
-            letterSpacing: '0.18em', color: ORANGE, textTransform: 'uppercase', whiteSpace: 'nowrap',
-          }}>
+          <div className="absolute inset-0 bg-gradient-to-r from-home/10 to-transparent pointer-events-none" />
+          <span className="font-anybody text-sm font-black tracking-widest text-home relative z-10 leading-none">
             BREAKING NEWS
           </span>
         </div>
 
-        {/* Scrolling ticker text */}
+        {/* Scrolling text */}
         <div className="flex-1 overflow-hidden relative flex items-center">
           <div className="absolute whitespace-nowrap animate-ticker flex items-center">
             {[0, 1].map(rep => (
-              <span key={rep} className="flex items-center gap-16 px-8">
+              <span key={rep} className="flex items-center gap-16 px-8 select-none">
                 {tickerEvents.length > 0 ? (
                   tickerEvents.map(evt => (
                     <span key={`${evt.id}-${rep}`} className="flex items-center gap-3">
-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 14, color: ORANGE, fontWeight: 700 }}>
+                      <span className="font-anybody text-xs text-home font-bold tracking-wider uppercase">
                         {evt.title}
                       </span>
-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>
+                      <span className="font-hanken text-xs text-white/80">
                         {evt.subtitle}
                       </span>
-                      <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 20 }}>·</span>
+                      <span className="text-white/15 text-lg font-bold select-none">·</span>
                     </span>
                   ))
                 ) : (
                   <>
                     <span className="flex items-center gap-3">
-                      <span style={{ fontFamily: 'var(--font-anybody)', fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', color: ORANGE }}>NEXT MATCH:</span>
-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>
+                      <span className="font-anybody text-xs text-home font-bold tracking-wider uppercase">MATCH EN DIRECT :</span>
+                      <span className="font-hanken text-xs text-white/80">
                         {match.homeTeam && match.awayTeam
-                          ? `${match.homeTeam.toUpperCase()} vs. ${match.awayTeam.toUpperCase()} — PARIEZ MAINTENANT!`
-                          : 'REJOIGNEZ LA PARTIE EN SCANNANT LE QR CODE!'}
+                          ? `${match.homeTeam.toUpperCase()} vs. ${match.awayTeam.toUpperCase()} — FAITES VOS PARIS SUR VOTRE COMPTE !`
+                          : 'REJOIGNEZ LA PARTIE EN SCANNANT LE CODE QR !'}
                       </span>
                     </span>
-                    <span style={{ color: 'rgba(255,255,255,0.15)', margin: '0 20px' }}>·</span>
-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>
-                      RECEVEZ 1 000 TOILESCOINS GRATUITS EN REJOIGNANT LA PARTIE!
+                    <span className="text-white/15 text-lg font-bold select-none">·</span>
+                    <span className="font-hanken text-xs text-white/80">
+                      Gagnez 1 000 ToilesCoins d&apos;accueil lors de votre inscription !
                     </span>
-                    <span style={{ color: 'rgba(255,255,255,0.15)', margin: '0 20px' }}>·</span>
+                    <span className="text-white/15 text-lg font-bold select-none">·</span>
                   </>
                 )}
               </span>
             ))}
           </div>
-          {/* Fade edges */}
-          <div className="absolute left-0 top-0 w-8 h-full pointer-events-none" style={{ background: 'linear-gradient(to right, rgba(4,8,16,0.97), transparent)' }} />
-          <div className="absolute right-0 top-0 w-16 h-full pointer-events-none" style={{ background: 'linear-gradient(to left, rgba(4,8,16,0.97), transparent)' }} />
-        </div>
-
-        {/* QR Code section */}
-        <div
-          className="flex items-center gap-3 px-4 shrink-0"
-          style={{ borderLeft: '1px solid rgba(255,255,255,0.07)' }}
-        >
-          <div style={{ background: 'white', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {qrUrl ? (
-              <img src={qrUrl} alt="QR Code" style={{ width: 44, height: 44, display: 'block' }} />
-            ) : (
-              <div className="animate-pulse" style={{ width: 44, height: 44, background: '#e0e0e0', borderRadius: 4 }} />
-            )}
-          </div>
-          <div style={{ fontSize: 8.5, letterSpacing: '0.11em', color: 'rgba(255,255,255,0.4)', fontWeight: 700, lineHeight: 1.5, textTransform: 'uppercase' }}>
-            SCAN FOR<br />LIVE INTERACTION<br />&amp; BETTING
-          </div>
+          {/* Edge Faders */}
+          <div className="absolute left-0 top-0 w-8 h-full pointer-events-none" style={{ background: 'linear-gradient(to right, rgba(7,7,26,0.95), transparent)' }} />
+          <div className="absolute right-0 top-0 w-16 h-full pointer-events-none" style={{ background: 'linear-gradient(to left, rgba(7,7,26,0.95), transparent)' }} />
         </div>
       </div>
 

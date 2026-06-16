@@ -133,6 +133,34 @@ export function resolveHalftimeMarkets(
 }
 
 /**
+ * Résout les marchés de mi-temps en reconstituant le score de la pause à partir de la liste des
+ * buteurs (buts marqués avant la 46e minute). Utile à la FIN du match (les marchés mi-temps ne
+ * doivent pas rester « en attente » si on n'est jamais passé par une transition mi-temps propre).
+ * Idempotent : les marchés déjà résolus sont ignorés.
+ * @param finalHome/finalAway score final — sert à juger la fiabilité (0-0 final ⇒ 0-0 mi-temps sûr).
+ */
+export function resolveHalftimeFromScorers(
+  matchId: string,
+  homeTeam: string,
+  awayTeam: string,
+  scorers: ResolveScorer[],
+  finalHome: number,
+  finalAway: number,
+) {
+  let htHome = 0;
+  let htAway = 0;
+  for (const s of scorers) {
+    if (s.minute > 0 && s.minute <= 45) {
+      if (s.team === 'home') htHome++;
+      else htAway++;
+    }
+  }
+  // Fiable si on dispose des buteurs (liste API/ESPN) OU si le match a fini 0-0 (alors mi-temps = 0-0).
+  const reliable = scorers.length > 0 || (finalHome === 0 && finalAway === 0);
+  resolveHalftimeMarkets(matchId, homeTeam, awayTeam, htHome, htAway, reliable);
+}
+
+/**
  * Résolution des marchés de fin de match.
  * @param cornerDataAvailable false → pas de données de corners, marché laissé ouvert.
  */
@@ -195,5 +223,86 @@ export function resolveFulltimeMarkets(
     }
   }
 
+  // 6. Marchés additionnels Oui/Non (type 'flash' du blueprint : double chance, +1.5/+3.5 buts,
+  //    +1.5 par équipe, clean sheets). ⚠️ Sans ce bloc, ces ~9 marchés restaient « pending » à la
+  //    résolution (c'était LA cause de « plein de paris non validés » à la fin manuelle d'un match).
+  const resolveYesNo = (suffix: string, condition: boolean) => {
+    const mId = `m-${matchId}-${suffix}`;
+    const m = db.prepare("SELECT * FROM markets WHERE id = ?").get(mId) as Record<string, unknown> | undefined;
+    if (m && !m.is_closed) {
+      const winnerName = condition ? 'Oui' : 'Non';
+      const w = db.prepare("SELECT * FROM outcomes WHERE market_id = ? AND name = ?").get(m.id, winnerName) as Record<string, unknown> | undefined;
+      if (w) resolveMarket(matchId, m.id as string, w.id as string);
+    }
+  };
+
+  resolveYesNo('dc-home-nul', homeScore >= awayScore);
+  resolveYesNo('dc-away-nul', awayScore >= homeScore);
+  resolveYesNo('dc-home-away', homeScore !== awayScore);
+  resolveYesNo('ou15', (homeScore + awayScore) > 1.5);
+  resolveYesNo('ou35', (homeScore + awayScore) > 3.5);
+  resolveYesNo('home-over15', homeScore > 1.5);
+  resolveYesNo('away-over15', awayScore > 1.5);
+  resolveYesNo('home-cleansheet', awayScore === 0);
+  resolveYesNo('away-cleansheet', homeScore === 0);
+
   warnUnresolvedMarkets(matchId, 'fin de match');
+}
+
+// ─── Premier buteur ────────────────────────────────────────────────────────────
+
+/** Normalise un nom de joueur pour le rapprochement inter-API (sans accents, minuscule). */
+function normName(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export interface ResolveScorer {
+  team: 'home' | 'away';
+  playerName: string;
+  minute: number;
+}
+
+/**
+ * Résout le marché « Premier Buteur » — UNIQUEMENT si le nom du 1er buteur (API) correspond
+ * de façon fiable à une issue nommée du marché. Sinon on laisse en résolution manuelle (on
+ * ne paie jamais sur un rapprochement de nom douteux). Les issues génériques « Vedette » ne
+ * sont pas auto-résolues.
+ */
+export function resolveFirstScorerMarket(
+  matchId: string,
+  scorers: ResolveScorer[],
+  homeTeam: string,
+  awayTeam: string,
+) {
+  const market = db.prepare("SELECT * FROM markets WHERE type = 'first_scorer' AND match_id = ? AND is_closed = 0").get(matchId) as Record<string, unknown> | undefined;
+  if (!market) return;
+
+  if (!scorers.length) {
+    console.warn(`[resolve] first_scorer (${matchId}): aucun buteur connu → résolution manuelle requise`);
+    return;
+  }
+
+  const first = scorers[0];
+  const outcomes = db.prepare('SELECT id, name FROM outcomes WHERE market_id = ?').all(market.id) as { id: string; name: string }[];
+  const sn = normName(first.playerName);
+
+  // 1) Égalité stricte normalisée. 2) Contenance forte (≥4 car.) pour « K. Mbappé » vs « Mbappe ».
+  let win = outcomes.find(o => normName(o.name) === sn && sn.length > 0);
+  if (!win) {
+    win = outcomes.find(o => {
+      const on = normName(o.name);
+      if (on.length < 4) return false;
+      return sn.includes(on) || on.includes(sn);
+    });
+  }
+
+  if (win) {
+    resolveMarket(matchId, market.id as string, win.id);
+  } else {
+    const team = first.team === 'home' ? homeTeam : awayTeam;
+    console.warn(
+      `[resolve] first_scorer (${matchId}): pas de correspondance fiable pour « ${first.playerName} » ` +
+      `(${team}, ${first.minute}') → résolution manuelle requise.`,
+    );
+  }
 }
